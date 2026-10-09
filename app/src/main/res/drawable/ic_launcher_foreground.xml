@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标前景：一只「眼睛」，落在 108dp 画布中央 72dp 安全区内 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillColor="#4FD1C5"
+        android:pathData="M24,54 C36,36 72,36 84,54 C72,72 36,72 24,54 Z" />
+
+    <path
+        android:fillColor="#101828"
+        android:pathData="M44,54 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0 Z" />
+
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,50 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0 Z" />
+</vector>

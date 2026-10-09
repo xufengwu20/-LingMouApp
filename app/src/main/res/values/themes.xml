@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 只作为 Compose 绘制前的窗口底衬；真正的配色在 ui/theme 里 -->
+    <style name="Theme.LingMouApp" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FFF7F9FC</item>
+    </style>
+</resources>

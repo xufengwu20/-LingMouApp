@@ -1,0 +1,64 @@
+# ============================================================
+# 灵眸 LingMou — Git 忽略规则
+# 注意：Git 的忽略模式是「按名字匹配」，不是后缀匹配。
+#      写 .jks 只会忽略名为 ".jks" 的文件，
+#      要忽略所有证书必须写 *.jks。下面两种形式都保留了。
+# ============================================================
+
+# ---------- 构建产物 ----------
+build/
+/build/
+/app/build/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+captures/
+.externalNativeBuild/
+.cxx/
+
+# ---------- Gradle ----------
+.gradle/
+gradle-app.setting
+.gradletasknamecache
+
+# ---------- 本机工具链 / 依赖缓存（约 2GB，绝不入库） ----------
+.toolchain/
+
+# ---------- IDE ----------
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.vscode/
+
+# ---------- 本机配置：里面有 Android SDK 绝对路径和可选的 API Key ----------
+local.properties
+/local.properties
+
+# ---------- 签名与密钥（绝不入库） ----------
+.jks
+*.jks
+.keystore
+*.keystore
+*.p12
+*.pfx
+*.pepk
+keystore.properties
+signing.properties
+
+# ---------- 环境变量 ----------
+.env
+.env.*
+*.env
+
+# ---------- 构建工具运行期产生的临时目录 ----------
+.kotlin/
+.adb-temp/
+
+# ---------- 系统与编辑器杂项 ----------
+.DS_Store
+Thumbs.db
+*.log

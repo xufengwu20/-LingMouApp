@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- 当前版本不做任何数据库/文件持久化，无需备份内容 -->
+</full-backup-content>
