@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.lingmouapp.service.SystemSettingsNavigator
+import com.example.lingmouapp.ui.KnowledgeScreen
 import com.example.lingmouapp.ui.MainScreen
 import com.example.lingmouapp.ui.theme.LingMouTheme
 import com.example.lingmouapp.viewmodel.MainViewModel
@@ -56,24 +57,40 @@ class MainActivity : ComponentActivity() {
                 val state by viewModel.state.collectAsStateWithLifecycle()
                 val preview by viewModel.preview.collectAsStateWithLifecycle()
 
-                MainScreen(
-                    state = state,
-                    preview = preview,
-                    onSelectMode = viewModel::selectMode,
-                    onRequestPermissions = { requestRuntimePermissions() },
-                    onOpenNotificationAccess = { jumpToNotificationAccess() },
-                    onOpenExactAlarmSettings = { jumpToExactAlarm() },
-                    onToggleCloudAsr = viewModel::setPreferCloudAsr,
-                    onTogglePlayer = viewModel::togglePlayer,
-                    onPauseMedia = viewModel::pauseMedia,
-                    onPlayMedia = viewModel::playMedia,
-                    onRewindMedia = viewModel::rewindMedia,
-                    onSimulateSpeech = viewModel::simulateSpeech,
-                    onRunSelfTest = viewModel::runCommandSelfTest,
-                    onRefreshMediaSession = viewModel::refreshMediaSession,
-                    onCancelReminder = viewModel::cancelReminder,
-                    onClearLog = viewModel::clearLog
-                )
+                // 两个页面用状态位切换，没有引入 Navigation Compose
+                if (state.showKnowledgeBase) {
+                    KnowledgeScreen(
+                        state = state,
+                        onBack = viewModel::closeKnowledgeBase,
+                        onRefresh = viewModel::openKnowledgeBase,
+                        onDeleteNote = viewModel::deleteNote,
+                        onDeleteRecipe = viewModel::deleteRecipe
+                    )
+                } else {
+                    MainScreen(
+                        state = state,
+                        preview = preview,
+                        onSelectMode = viewModel::selectMode,
+                        onRequestPermissions = { requestRuntimePermissions() },
+                        onOpenNotificationAccess = { jumpToNotificationAccess() },
+                        onOpenExactAlarmSettings = { jumpToExactAlarm() },
+                        onOpenAppDetails = { openAppDetails() },
+                        onToggleCloudAsr = viewModel::setPreferCloudAsr,
+                        onToggleCaption = viewModel::setCaptionEnabled,
+                        onOpenKnowledgeBase = viewModel::openKnowledgeBase,
+                        onGenerateSummary = viewModel::generateSummary,
+                        onGenerateRecipe = viewModel::generateRecipe,
+                        onTogglePlayer = viewModel::togglePlayer,
+                        onPauseMedia = viewModel::pauseMedia,
+                        onPlayMedia = viewModel::playMedia,
+                        onRewindMedia = viewModel::rewindMedia,
+                        onSimulateSpeech = viewModel::simulateSpeech,
+                        onRunSelfTest = viewModel::runCommandSelfTest,
+                        onRefreshMediaSession = viewModel::refreshMediaSession,
+                        onCancelReminder = viewModel::cancelReminder,
+                        onClearLog = viewModel::clearLog
+                    )
+                }
             }
         }
 
@@ -103,13 +120,31 @@ class MainActivity : ComponentActivity() {
     private fun jumpToNotificationAccess() {
         val jump = SystemSettingsNavigator.openNotificationListener(this)
         toast(jump.page)
-        viewModel.log("跳转系统设置（通知使用权）：${jump.page}${if (jump.ok) "" else " —— 跳转失败"}")
+        viewModel.log(
+            if (jump.alreadySatisfied) {
+                "通知使用权：${jump.page}"
+            } else {
+                "跳转系统设置（通知使用权）：${jump.page}${if (jump.ok) "" else " —— 跳转失败"}"
+            }
+        )
     }
 
     private fun jumpToExactAlarm() {
         val jump = SystemSettingsNavigator.openExactAlarm(this)
         toast(jump.page)
-        viewModel.log("跳转系统设置（精确闹钟）：${jump.page}${if (jump.ok) "" else " —— 跳转失败"}")
+        viewModel.log(
+            if (jump.alreadySatisfied) {
+                "精确闹钟：${jump.page}"
+            } else {
+                "跳转系统设置（精确闹钟）：${jump.page}${if (jump.ok) "" else " —— 跳转失败"}"
+            }
+        )
+    }
+
+    private fun openAppDetails() {
+        val jump = SystemSettingsNavigator.openAppDetails(this)
+        toast(jump.page)
+        viewModel.log("跳转系统设置（应用详情）：${jump.page}")
     }
 
     private fun reportPermissionChanges() {

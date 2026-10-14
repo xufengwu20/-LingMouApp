@@ -16,6 +16,8 @@ import androidx.compose.ui.unit.dp
 import com.example.lingmouapp.model.AppMode
 import com.example.lingmouapp.model.AppUiState
 import com.example.lingmouapp.ui.components.CameraSection
+import com.example.lingmouapp.ui.components.CaptionSection
+import com.example.lingmouapp.ui.components.KnowledgeSection
 import com.example.lingmouapp.ui.components.LogSection
 import com.example.lingmouapp.ui.components.ModeSelector
 import com.example.lingmouapp.ui.components.PermissionPanel
@@ -32,7 +34,12 @@ fun MainScreen(
     onRequestPermissions: () -> Unit,
     onOpenNotificationAccess: () -> Unit,
     onOpenExactAlarmSettings: () -> Unit,
+    onOpenAppDetails: () -> Unit,
     onToggleCloudAsr: (Boolean) -> Unit,
+    onToggleCaption: (Boolean) -> Unit,
+    onOpenKnowledgeBase: () -> Unit,
+    onGenerateSummary: () -> Unit,
+    onGenerateRecipe: () -> Unit,
     onTogglePlayer: () -> Unit,
     onPauseMedia: () -> Unit,
     onPlayMedia: () -> Unit,
@@ -68,10 +75,18 @@ fun MainScreen(
                 state = state,
                 onRequestPermissions = onRequestPermissions,
                 onOpenNotificationAccess = onOpenNotificationAccess,
-                onOpenExactAlarmSettings = onOpenExactAlarmSettings
+                onOpenExactAlarmSettings = onOpenExactAlarmSettings,
+                onOpenAppDetails = onOpenAppDetails
             )
 
             StatusPanel(state = state)
+
+            KnowledgeSection(
+                state = state,
+                onOpenKnowledgeBase = onOpenKnowledgeBase,
+                onGenerateSummary = onGenerateSummary,
+                onGenerateRecipe = onGenerateRecipe
+            )
 
             CameraSection(state = state, preview = preview)
 
@@ -82,6 +97,12 @@ fun MainScreen(
                 onPlayMedia = onPlayMedia,
                 onRewindMedia = onRewindMedia,
                 onRefreshMediaSession = onRefreshMediaSession
+            )
+
+            // 字幕紧跟在视频占位区下方
+            CaptionSection(
+                state = state,
+                onToggleCaption = onToggleCaption
             )
 
             SpeechSection(

@@ -1,0 +1,9 @@
+-- last_insert_rowid() 是**连接级**的，不是表级的：
+-- 同一个 SqlDriver（单连接）上任何 insert 之后调用它，都会返回刚插入的 rowid。
+-- 所以这里只定义一次，五张表的 insert 都复用它来拿自增主键。
+--
+-- 不用 INSERT ... RETURNING 是因为 Android 自带的 SQLite 版本随 API 而变
+-- （API 26 上是 3.18），RETURNING 要 3.35+ 才支持。
+
+lastInsertRowId:
+SELECT last_insert_rowid();

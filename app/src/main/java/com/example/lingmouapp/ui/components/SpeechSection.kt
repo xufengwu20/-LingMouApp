@@ -45,10 +45,6 @@ fun SpeechSection(
             text = "A. 语音识别后端",
             hint = "这一项只影响「对着手机说话」。没配 API Key 也不影响下面的本地指令测试。"
         )
-        Text(
-            text = "当前：${state.asrBackend}",
-            style = MaterialTheme.typography.bodySmall
-        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -56,26 +52,65 @@ fun SpeechSection(
         ) {
             Switch(
                 checked = state.preferCloudAsr,
-                onCheckedChange = onToggleCloudAsr,
-                enabled = state.siliconFlowKeyConfigured
+                onCheckedChange = onToggleCloudAsr
             )
             Text(
-                text = if (state.siliconFlowKeyConfigured) {
-                    "使用硅基流动云端 ASR"
-                } else {
-                    "未配置 API Key：用系统内置识别即可；\n" +
-                        "不想配也完全没问题，本地指令测试照样可用。"
-                },
-                style = MaterialTheme.typography.bodySmall
+                text = "云端识别（硅基流动）",
+                style = MaterialTheme.typography.bodyMedium
             )
         }
+
+        BlockRow("当前识别后端", state.asrBackend)
+        BlockRow(
+            "云端模型",
+            buildString {
+                append(state.asrModel.ifBlank { "—" })
+                append(
+                    if (state.asrModelIsDefault) "（默认值，可在 local.properties 改）"
+                    else "（来自 local.properties）"
+                )
+            }
+        )
+        BlockRow("麦克风", state.microphoneState)
+
+        if (!state.siliconFlowKeyConfigured) {
+            Text(
+                text = "未配置 SILICONFLOW_API_KEY：打开上面的开关会立即自动降级为系统内置识别，" +
+                    "不会报错，也不影响任何功能。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        if (state.asrNote.isNotBlank()) {
+            Text(
+                text = state.asrNote,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (state.asrDegraded) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+        Text(
+            text = if (state.mode.usesMicrophone) {
+                "提示：后台持续识别依赖前台服务，烹饪模式下可切后台继续；" +
+                    "但录音期间麦克风被本应用占用。"
+            } else {
+                "提示：当前模式不使用麦克风，这里开启的识别只在前台有效；" +
+                    "要在后台持续识别请先切到烹饪模式。"
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
 
         HorizontalDivider()
 
         // ---------- B. 本地指令测试 ----------
         SubHeader(
             text = "B. 本地指令测试（不依赖麦克风 / 不依赖 API Key）",
-            hint = "直接调用指令解析，只要送入文字就会立刻触发对应的控制行为。"
+            hint = "直接调用本地指令路由，送入文字就立刻触发对应控制动作；" +
+                "与识别后端是否可用、有没有配置 API Key 完全无关。"
         )
 
         OutlinedTextField(
@@ -115,7 +150,7 @@ fun SpeechSection(
             onClick = onRunSelfTest,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("运行本地指令自检（11 条用例）")
+            Text("运行本地指令自检（11 条用例 → 校验最终动作）")
         }
 
         if (state.commandSelfTests.isNotEmpty()) {

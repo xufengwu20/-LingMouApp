@@ -27,6 +27,10 @@ class MediaSessionController(private val context: Context) {
 
     private var changeListener: MediaSessionManager.OnActiveSessionsChangedListener? = null
 
+    /** 上一次查询失败的原因，用于把「明明授权了却拿不到会话」这种疑难直接显示出来 */
+    @Volatile
+    private var lastQueryError: String? = null
+
     // ------------------------------------------------------------------ 权限
 
     /** 用户是否已在系统设置里勾选本应用的通知使用权 */
@@ -36,36 +40,55 @@ class MediaSessionController(private val context: Context) {
         false
     }
 
-    private fun listenerComponent() = ComponentName(context, LingMouNotificationListener::class.java)
+    private fun listenerComponent(): ComponentName =
+        ComponentName(context, MediaNotificationListener::class.java)
 
     // ------------------------------------------------------------------ 取会话
 
+    private data class Query(val controllers: List<MediaController>, val error: String?)
+
     /**
-     * 原始会话列表。所有异常都在这里被吸收（未授权会抛 SecurityException），
-     * 调用方不需要再 try，也永远不会因为媒体会话问题崩溃。
+     * 查询活跃会话。所有异常都在这里被吸收，调用方不需要 try，也不会因此崩溃。
+     *
+     * SecurityException 单独标记：它意味着「系统里勾了通知使用权，但不认这个监听组件」，
+     * 典型场景是应用改过包名/组件名，或重装后残留了旧条目 —— 此时把开关关掉再打开即可。
+     * 不区分出来的话，界面只会说「没有媒体会话」，让人完全找不到方向。
      */
-    fun activeControllers(): List<MediaController> {
-        val m = manager ?: return emptyList()
-        if (!hasNotificationAccess()) return emptyList()
+    private fun query(): Query {
+        val m = manager ?: return Query(emptyList(), "no_service")
+        if (!hasNotificationAccess()) return Query(emptyList(), "no_permission")
         return try {
-            m.getActiveSessions(listenerComponent())
+            Query(m.getActiveSessions(listenerComponent()), null)
         } catch (e: SecurityException) {
-            emptyList()
+            lastQueryError = e.message ?: "SecurityException"
+            Query(emptyList(), "security")
         } catch (e: Exception) {
-            emptyList()
+            lastQueryError = e.message ?: e.javaClass.simpleName
+            Query(emptyList(), "error")
         }
     }
 
-    /** 排除本应用自己的会话，避免把指令发给自己 */
+    /** 原始会话列表（已授权时） */
+    fun activeControllers(): List<MediaController> = query().controllers
+
+    /**
+     * 候选会话：排除本应用自己，并把系统 UI 这类「不是真正在放视频」的会话排到最后。
+     *
+     * 之所以是「排到最后」而不是「直接排除」：极端情况下它可能是唯一能拿到的会话，
+     * 直接丢掉会让排查无从下手。
+     */
     private fun candidates(): List<MediaController> =
-        activeControllers().filter { it.packageName != context.packageName }
+        query().controllers
+            .filter { it.packageName != context.packageName }
+            .sortedBy { if (SYSTEM_PACKAGES.contains(it.packageName)) 1 else 0 }
 
     /**
      * 选一个「最可能正在放视频」的会话。
      *
      * 优先级：正在播放 > 处于可控制状态（暂停/缓冲/快进快退/停止） > 任意一个。
-     * 最后那档是刻意保留的：不少国产 App 的 playbackState 上报不全（经常是 STATE_NONE），
-     * 但 transportControls 依然有效，所以不能因为状态不标准就放弃它。
+     * 最后那档是刻意保留的：不少国产 App 的 playbackState 上报不全
+     * （B 站某些版本常常是 STATE_NONE），但 transportControls 依然有效，
+     * 所以不能因为状态不标准就放弃它。
      */
     private fun primaryController(): MediaController? {
         val list = candidates()
@@ -96,15 +119,30 @@ class MediaSessionController(private val context: Context) {
         }
         if (!hasNotificationAccess()) {
             return MediaSessionSnapshot(
-                summary = "未授予通知使用权，跨应用控制不可用",
+                summary = "未授予通知使用权，跨应用媒体控制不可用",
                 detail = "未授权"
+            )
+        }
+
+        val result = query()
+        if (result.error == "security") {
+            return MediaSessionSnapshot(
+                summary = "系统拒绝了媒体会话查询：监听组件未被系统接受。" +
+                    "请去「通知使用权」把灵眸关掉再重新打开一次",
+                detail = "SecurityException: ${lastQueryError ?: ""}"
+            )
+        }
+        if (result.error != null && result.error != "no_permission") {
+            return MediaSessionSnapshot(
+                summary = "查询媒体会话失败：${lastQueryError ?: result.error}",
+                detail = "error=${result.error}"
             )
         }
 
         val list = candidates()
         if (list.isEmpty()) {
             return MediaSessionSnapshot(
-                summary = "已授权，但当前没有活动媒体会话（先在 B 站/华为视频等播一个视频）",
+                summary = "没有可下发的媒体会话（先在 B 站 / 华为视频里播放一个视频，再回到这里刷新）",
                 sessionCount = 0,
                 detail = "无"
             )
@@ -129,8 +167,8 @@ class MediaSessionController(private val context: Context) {
     // ------------------------------------------------------------------ 监听
 
     /**
-     * 注册「活动会话变化」监听。授权状态一变就能立刻反映到界面上，
-     * 不用等轮询。重复调用是安全的。
+     * 注册「活动会话变化」监听。授权状态一变就能立刻反映到界面上，不用等轮询。
+     * 重复调用是安全的。
      */
     fun ensureWatching(onChanged: () -> Unit) {
         if (!hasNotificationAccess()) {
@@ -211,5 +249,10 @@ class MediaSessionController(private val context: Context) {
         PlaybackState.STATE_NONE -> "空闲（App 未上报状态）"
         null -> "无状态"
         else -> "未知状态($state)"
+    }
+
+    companion object {
+        /** 这些包名可能是「媒体控制中心」之类的壳会话，不是真正在放视频的 App */
+        private val SYSTEM_PACKAGES = setOf("android", "com.android.systemui")
     }
 }

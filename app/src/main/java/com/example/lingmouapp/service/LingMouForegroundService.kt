@@ -20,9 +20,7 @@ import androidx.lifecycle.LifecycleService
 import com.example.lingmouapp.model.AppMode
 import com.example.lingmouapp.model.FaceFrame
 import com.example.lingmouapp.model.MediaAction
-import com.example.lingmouapp.service.asr.AsrEngine
-import com.example.lingmouapp.service.asr.SiliconFlowAsrEngine
-import com.example.lingmouapp.service.asr.SystemAsrEngine
+import com.example.lingmouapp.service.gesture.HeadGestureClassifier
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -62,7 +60,6 @@ class LingMouForegroundService : LifecycleService() {
 
     private var gazeTracker: GazeTracker? = null
     private var headGestureDetector: HeadGestureDetector? = null
-    private var asrEngine: AsrEngine? = null
 
     private var intruderNotifiedAt = 0L
 
@@ -157,6 +154,7 @@ class LingMouForegroundService : LifecycleService() {
                 LingMouEngine.setMicrophoneState("已释放（专注模式不需要麦克风）")
                 setupGazeTracker()
                 headGestureDetector = null
+                LingMouEngine.setHeadControl(false)
                 startCamera()
             }
             AppMode.COOKING -> {
@@ -193,6 +191,11 @@ class LingMouForegroundService : LifecycleService() {
             onAwayTimeout = {
                 val seconds = AWAY_THRESHOLD_MS / 1000
                 LingMouEngine.log("视线离开屏幕已超过 $seconds 秒 → 发送暂停")
+                LingMouEngine.recordDistraction(
+                    awayMillis = AWAY_THRESHOLD_MS,
+                    faceCount = LingMouEngine.state.value.faceCount.toLong(),
+                    kind = "gaze_away"
+                )
                 LingMouEngine.performMediaAction(MediaAction.PAUSE, "视线离开 $seconds 秒")
             },
             onAttentionBack = {
@@ -207,6 +210,12 @@ class LingMouForegroundService : LifecycleService() {
         headGestureDetector = HeadGestureDetector(
             onNod = { LingMouEngine.onNodDetected() },
             onShake = { LingMouEngine.onShakeDetected() }
+        )
+        LingMouEngine.setHeadControl(true)
+        LingMouEngine.log(
+            "头部控制已启用（点头=打进度标记，摇头=回退 5 秒；" +
+                "阈值 俯仰 ${HeadGestureClassifier.DEFAULT_NOD_THRESHOLD_DEG}° / " +
+                "偏航 ${HeadGestureClassifier.DEFAULT_SHAKE_THRESHOLD_DEG}°）"
         )
     }
 
@@ -323,6 +332,11 @@ class LingMouForegroundService : LifecycleService() {
                 if (now - intruderNotifiedAt >= INTRUDER_COOLDOWN_MS) {
                     intruderNotifiedAt = now
                     notificationHelper.notifyIntruder(frame.faceCount)
+                    LingMouEngine.recordDistraction(
+                        awayMillis = 0L,
+                        faceCount = frame.faceCount.toLong(),
+                        kind = "intruder"
+                    )
                     LingMouEngine.log("检测到 ${frame.faceCount} 张人脸 → 已发送「有人靠近」通知")
                 }
             }
@@ -332,62 +346,34 @@ class LingMouForegroundService : LifecycleService() {
             faceCount = frame.faceCount,
             attentive = frame.attentive,
             pitch = frame.headEulerX,
-            yaw = frame.headEulerY
+            yaw = frame.headEulerY,
+            roll = frame.headEulerZ
         )
     }
 
     // ------------------------------------------------------------ 语音
+    //
+    // ASR 的「所有权」已经上移到 LingMouEngine —— 这样界面上的「云端识别」开关
+    // 也能直接 start / stop，不必先切到烹饪模式。服务只负责在模式变化时发号施令，
+    // 具体用云端还是系统内置、要不要降级，全部由引擎决定。
 
     private fun startAsr() {
-        stopAsr()
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            LingMouEngine.setMicrophoneState("缺少 RECORD_AUDIO 权限")
-            LingMouEngine.setAsrBackend("不可用")
-            LingMouEngine.log("无法启动语音识别：未授予 RECORD_AUDIO 权限")
-            return
-        }
-
-        val engine = if (LingMouEngine.useCloudAsr()) {
-            SiliconFlowAsrEngine(apiKey = com.example.lingmouapp.BuildConfig.SILICONFLOW_API_KEY)
-        } else {
-            SystemAsrEngine(this)
-        }
-
-        asrEngine = engine
-        LingMouEngine.setAsrBackend(engine.displayName)
-        LingMouEngine.setMicrophoneState("监听中")
-        LingMouEngine.log("语音识别已启动：${engine.displayName}")
-
-        engine.start(
-            onText = { text -> LingMouEngine.onSpeechText(text) },
-            onError = { message ->
-                LingMouEngine.log("语音识别：$message")
-                LingMouEngine.setMicrophoneState("异常：$message")
-            }
+        LingMouEngine.startAsr(
+            preferCloud = LingMouEngine.state.value.preferCloudAsr,
+            source = "烹饪模式"
         )
     }
 
     private fun stopAsr() {
-        val engine = asrEngine
-        asrEngine = null
-        if (engine != null) {
-            try {
-                engine.stop()
-                engine.release()
-            } catch (e: Exception) {
-                // ignore
-            }
-        }
-        LingMouEngine.setAsrBackend("未启动")
+        LingMouEngine.stopAsr()
     }
 
     // ------------------------------------------------------------ 收尾
 
     private fun shutdown() {
         stopAsr()
+        // 服务被直接停掉（没有走 setMode）时也要结算会话，否则这段的统计和文字稿会丢
+        LingMouEngine.endSession("引擎停止")
 
         tickerJob?.cancel()
         tickerJob = null
@@ -395,6 +381,7 @@ class LingMouForegroundService : LifecycleService() {
         gazeTracker?.reset()
         gazeTracker = null
         headGestureDetector = null
+        LingMouEngine.setHeadControl(false)
 
         try {
             cameraProvider?.unbindAll()

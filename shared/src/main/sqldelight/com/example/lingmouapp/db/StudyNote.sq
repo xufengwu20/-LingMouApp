@@ -1,0 +1,35 @@
+-- 学习笔记：一次「专注/烹饪会话」结束后由 LLM 生成的内容都落在这里
+CREATE TABLE StudyNote (
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    -- 产生这条笔记的模式：FOCUS / COOKING
+    mode TEXT NOT NULL,
+    -- 生成它的原始文字稿，便于回溯与重新生成
+    sourceTranscript TEXT NOT NULL DEFAULT '',
+    createdAt INTEGER NOT NULL
+);
+
+selectAll:
+SELECT *
+FROM StudyNote
+ORDER BY createdAt DESC;
+
+selectById:
+SELECT *
+FROM StudyNote
+WHERE id = ?;
+
+countAll:
+SELECT count(*) FROM StudyNote;
+
+insert:
+INSERT INTO StudyNote(title, content, mode, sourceTranscript, createdAt)
+VALUES (?, ?, ?, ?, ?);
+
+deleteById:
+DELETE FROM StudyNote
+WHERE id = ?;
+
+deleteAll:
+DELETE FROM StudyNote;

@@ -1,0 +1,32 @@
+-- 菜谱：从烹饪模式的文字稿里由 LLM 抽取出来
+CREATE TABLE Recipe (
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    sourceTranscript TEXT NOT NULL DEFAULT '',
+    createdAt INTEGER NOT NULL
+);
+
+selectAll:
+SELECT *
+FROM Recipe
+ORDER BY createdAt DESC;
+
+selectById:
+SELECT *
+FROM Recipe
+WHERE id = ?;
+
+countAll:
+SELECT count(*) FROM Recipe;
+
+insert:
+INSERT INTO Recipe(title, summary, sourceTranscript, createdAt)
+VALUES (?, ?, ?, ?);
+
+deleteById:
+DELETE FROM Recipe
+WHERE id = ?;
+
+deleteAll:
+DELETE FROM Recipe;

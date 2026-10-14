@@ -15,9 +15,23 @@ data class AppUiState(
     val awayMillis: Long = 0L,
     val headPitch: Float = 0f,
     val headYaw: Float = 0f,
+    val headRoll: Float = 0f,
+
+    // 头部动作控制（烹饪模式）
+    /** 点头/摇头识别是否处于启用状态（烹饪模式 + 摄像头在跑时为 true） */
+    val headControlEnabled: Boolean = false,
+    /** 最近一次识别到的头部动作，供状态区显示 */
+    val lastHeadGesture: String = "",
 
     // 语音
     val asrBackend: String = "未启动",
+    val asrRunning: Boolean = false,
+    val asrModel: String = "",
+    val asrModelIsDefault: Boolean = false,
+    /** 是否发生过自动降级（缺 Key 或云端连续失败），用于界面高亮提示 */
+    val asrDegraded: Boolean = false,
+    /** 最近一条识别相关的提示 / 错误，直接显示给用户 */
+    val asrNote: String = "",
     val lastTranscript: String = "",
     val lastCommand: String = "",
     val preferCloudAsr: Boolean = false,
@@ -29,8 +43,29 @@ data class AppUiState(
     val mediaSessionCount: Int = 0,
     val player: PlayerState = PlayerState(),
 
+    // AI 字幕（数据来源就是语音识别的原文，不额外占用麦克风）
+    val captionEnabled: Boolean = false,
+    /** 实时字幕文本；未开启时恒为空 */
+    val captionText: String = "",
+    /** 字幕相关的提示（为什么开启失败 / 为什么被关掉） */
+    val captionNote: String = "",
+
     // 本地指令自检（完全不经过麦克风与 API Key）
     val commandSelfTests: List<CommandSelfTest> = emptyList(),
+
+    // 会话文字稿与知识库
+    /** 当前会话累计到的文字稿条数（语音识别每出一句 +1） */
+    val transcriptLines: Int = 0,
+    /** 是否正在调用 LLM 生成内容 */
+    val isGenerating: Boolean = false,
+    /** 生成结果 / 失败原因，直接显示给用户 */
+    val generationNote: String = "",
+    /** 是否正在展示「笔记/菜谱」页面 */
+    val showKnowledgeBase: Boolean = false,
+    /** 数据库是否可用 */
+    val databaseReady: Boolean = false,
+    val notes: List<NoteItem> = emptyList(),
+    val recipes: List<RecipeItem> = emptyList(),
 
     // 定时
     val reminders: List<Reminder> = emptyList(),

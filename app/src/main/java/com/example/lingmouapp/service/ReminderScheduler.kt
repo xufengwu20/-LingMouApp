@@ -34,12 +34,21 @@ class ReminderScheduler(private val context: Context) {
     fun schedule(durationMs: Long, label: String): Reminder {
         val id = idGenerator.getAndIncrement()
         val triggerAt = System.currentTimeMillis() + durationMs
-        val exact = canScheduleExact()
+        var exact = canScheduleExact()
 
-        alarmManager?.let { am ->
+        val am = alarmManager
+        if (am != null) {
             val pi = pendingIntent(id, label)
             if (exact) {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+                try {
+                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+                } catch (e: SecurityException) {
+                    // 权限可能在 canScheduleExactAlarms() 与这里之间被撤销
+                    // （用户刚好在设置里关掉，Android 14 上是允许随时改的）。
+                    // 此时绝不能让提醒直接消失 —— 降级为非精确闹钟继续排队。
+                    exact = false
+                    am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+                }
             } else {
                 // 没有精确闹钟权限时退化为非精确闹钟，功能不至于失效
                 am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)

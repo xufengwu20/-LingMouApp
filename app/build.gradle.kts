@@ -8,15 +8,44 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// 可选：在 local.properties 里写 SILICONFLOW_API_KEY=sk-xxx 即可启用云端 ASR。
-// 不填时应用自动回退到系统内置 SpeechRecognizer，功能依然可用。
+// ============================================================
+// 硅基流动云端 ASR 配置，全部从 local.properties 读取（都可不填）。
+//
+// 这里读不到任何东西都不影响 App 运行：
+//   - 缺 Key      → 代码里走「自动降级到系统内置识别」分支
+//   - 缺模型名    → 回退到 DEFAULT_ASR_MODEL，并在界面上标注「默认值」
+//   - 本地指令闭环 → 与这些配置完全无关，连 INTERNET 权限都用不上
+// ============================================================
 val localProps = Properties().apply {
     val f = rootProject.file("local.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
-val siliconFlowKey: String = localProps.getProperty("SILICONFLOW_API_KEY").orEmpty()
-val siliconFlowModel: String =
-    localProps.getProperty("SILICONFLOW_MODEL") ?: "FunAudioLLM/SenseVoiceSmall"
+
+val siliconFlowKey: String = localProps.getProperty("SILICONFLOW_API_KEY").orEmpty().trim()
+
+// 兼容旧字段名 SILICONFLOW_MODEL
+val rawAsrModel: String = (
+    localProps.getProperty("SILICONFLOW_ASR_MODEL")
+        ?: localProps.getProperty("SILICONFLOW_MODEL")
+    ).orEmpty().trim()
+
+val DEFAULT_ASR_MODEL = "FunAudioLLM/SenseVoiceSmall"
+val asrModelIsDefault: Boolean = rawAsrModel.isBlank()
+val siliconFlowModel: String = if (asrModelIsDefault) DEFAULT_ASR_MODEL else rawAsrModel
+
+val siliconFlowEndpoint: String = localProps.getProperty("SILICONFLOW_ENDPOINT")
+    .orEmpty().trim()
+    .ifBlank { "https://api.siliconflow.cn/v1/audio/transcriptions" }
+
+// 云端内容分析（LLM）用的模型与地址。同样可以不填。
+val DEFAULT_LLM_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+val rawLlmModel: String = localProps.getProperty("SILICONFLOW_LLM_MODEL").orEmpty().trim()
+val llmModelIsDefault: Boolean = rawLlmModel.isBlank()
+val siliconFlowLlmModel: String = if (llmModelIsDefault) DEFAULT_LLM_MODEL else rawLlmModel
+
+val siliconFlowLlmEndpoint: String = localProps.getProperty("SILICONFLOW_LLM_ENDPOINT")
+    .orEmpty().trim()
+    .ifBlank { "https://api.siliconflow.cn/v1/chat/completions" }
 
 // 正常情况下 AGP 会用 ~/.android/debug.keystore 自动签名 debug 包。
 // 当该目录不可写（受限沙箱 / CI）时，回退到工程内自带的调试签名，保证 assembleDebug 仍能出包。
@@ -37,12 +66,12 @@ android {
         vectorDrawables { useSupportLibrary = true }
 
         buildConfigField("String", "SILICONFLOW_API_KEY", "\"$siliconFlowKey\"")
-        buildConfigField("String", "SILICONFLOW_MODEL", "\"$siliconFlowModel\"")
-        buildConfigField(
-            "String",
-            "SILICONFLOW_ENDPOINT",
-            "\"https://api.siliconflow.cn/v1/audio/transcriptions\""
-        )
+        buildConfigField("String", "SILICONFLOW_ASR_MODEL", "\"$siliconFlowModel\"")
+        buildConfigField("boolean", "SILICONFLOW_ASR_MODEL_IS_DEFAULT", "$asrModelIsDefault")
+        buildConfigField("String", "SILICONFLOW_ENDPOINT", "\"$siliconFlowEndpoint\"")
+        buildConfigField("String", "SILICONFLOW_LLM_MODEL", "\"$siliconFlowLlmModel\"")
+        buildConfigField("boolean", "SILICONFLOW_LLM_MODEL_IS_DEFAULT", "$llmModelIsDefault")
+        buildConfigField("String", "SILICONFLOW_LLM_ENDPOINT", "\"$siliconFlowLlmEndpoint\"")
     }
 
     signingConfigs {
@@ -103,6 +132,11 @@ kotlin {
 }
 
 dependencies {
+    // 平台无关的数据/领域层（SQLDelight 生成代码 + 仓库）
+    implementation(project(":shared"))
+    // SQLite 驱动只在 Android 端需要；桌面/Windows 端换 JdbcSqliteDriver
+    implementation(libs.sqldelight.android.driver)
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)

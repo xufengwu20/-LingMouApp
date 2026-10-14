@@ -1,16 +1,6 @@
 package com.example.lingmouapp.service.asr
 
-import com.example.lingmouapp.BuildConfig
-import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.engine.okhttp.OkHttp
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.request.forms.formData
-import io.ktor.client.request.forms.submitFormWithBinaryData
-import io.ktor.client.request.header
-import io.ktor.http.Headers
-import io.ktor.http.HttpHeaders
-import io.ktor.serialization.kotlinx.json.json
+import com.example.lingmouapp.service.AIService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -19,37 +9,27 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
-
-@Serializable
-private data class TranscriptionResponse(val text: String = "")
 
 /**
- * 硅基流动（SiliconFlow）云端语音识别，走 Ktor + OkHttp。
+ * 硅基流动云端语音识别。
  *
- * 流程：AudioRecord 录一段 → 本地静音检测切句 → multipart 上传 → 拿回 text。
- * API Key 从 local.properties 的 SILICONFLOW_API_KEY 经 BuildConfig 注入，
- * 不写死在源码里。
+ * 流程：AudioRecord 录一段 → 本地静音检测切句 → 交给 [AIService] 上传 → 拿回文本。
+ * 真正的 HTTP 细节都在 [AIService] 里，这里只负责录音与循环编排。
+ *
+ * 降级设计：
+ *   1. 没配 Key        → 立刻回调 [onDegrade]，由上层切成系统内置识别，不会空转
+ *   2. 连续失败达阈值  → 同样回调 [onDegrade]，停止重试，避免一直卡在坏网络上
+ * 单次失败只是记一笔并继续重试，不会中断识别。
  */
 class SiliconFlowAsrEngine(
-    private val apiKey: String,
-    private val endpoint: String = BuildConfig.SILICONFLOW_ENDPOINT,
-    private val model: String = BuildConfig.SILICONFLOW_MODEL
+    private val aiService: AIService = AIService(),
+    private val onDegrade: (String) -> Unit = {}
 ) : AsrEngine {
 
-    override val displayName: String = "硅基流动云端 ASR（$model）"
+    override val displayName: String = "硅基流动云端 ASR（${aiService.model}）"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val recorder = WavRecorder()
-
-    private val client = HttpClient(OkHttp) {
-        expectSuccess = false
-        install(ContentNegotiation) {
-            json(Json { ignoreUnknownKeys = true })
-        }
-    }
-
     private var loopJob: Job? = null
 
     @Volatile
@@ -58,13 +38,17 @@ class SiliconFlowAsrEngine(
 
     override fun start(onText: (String) -> Unit, onError: (String) -> Unit) {
         if (isListening) return
-        if (apiKey.isBlank()) {
-            onError("未配置硅基流动 API Key（local.properties 里的 SILICONFLOW_API_KEY）")
+
+        if (!aiService.isConfigured) {
+            onError("未配置 SILICONFLOW_API_KEY")
+            onDegrade("未配置 SILICONFLOW_API_KEY，云端识别不可用")
             return
         }
 
         isListening = true
         loopJob = scope.launch {
+            var consecutiveFailures = 0
+
             while (isActive && isListening) {
                 val wav = try {
                     recorder.recordUtterance()
@@ -72,43 +56,37 @@ class SiliconFlowAsrEngine(
                     null
                 }
                 if (!isActive || !isListening) break
+
                 if (wav == null) {
+                    // 这一段没听到人声，正常情况，稍等再录
                     delay(NO_VOICE_DELAY_MS)
                     continue
                 }
-                try {
-                    val text = transcribe(wav)
-                    if (text.isNotBlank()) onText(text.trim())
-                } catch (e: Exception) {
-                    onError("云端识别失败：${e.message ?: e.javaClass.simpleName}")
-                    delay(ERROR_RETRY_DELAY_MS)
-                }
-            }
-        }
-    }
 
-    private suspend fun transcribe(wav: ByteArray): String {
-        val response = client.submitFormWithBinaryData(
-            url = endpoint,
-            formData = formData {
-                append("model", model)
-                append(
-                    "file",
-                    wav,
-                    Headers.build {
-                        append(HttpHeaders.ContentType, "audio/wav")
-                        append(HttpHeaders.ContentDisposition, "filename=\"utterance.wav\"")
+                aiService.transcribeWav(wav).fold(
+                    onSuccess = { text ->
+                        consecutiveFailures = 0
+                        if (text.isNotBlank()) onText(text)
+                    },
+                    onFailure = { error ->
+                        consecutiveFailures++
+                        val detail = error.message ?: error.javaClass.simpleName
+                        onError(
+                            "云端识别失败($consecutiveFailures/$MAX_CONSECUTIVE_FAILURES)：$detail"
+                        )
+                        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                            isListening = false
+                            onDegrade(
+                                "云端识别连续 $MAX_CONSECUTIVE_FAILURES 次失败（$detail），" +
+                                    "已自动降级为系统内置识别"
+                            )
+                        } else {
+                            delay(ERROR_RETRY_DELAY_MS)
+                        }
                     }
                 )
             }
-        ) {
-            header(HttpHeaders.Authorization, "Bearer $apiKey")
         }
-
-        if (response.status.value !in 200..299) {
-            throw IllegalStateException("HTTP ${response.status.value}")
-        }
-        return response.body<TranscriptionResponse>().text
     }
 
     override fun stop() {
@@ -119,16 +97,13 @@ class SiliconFlowAsrEngine(
 
     override fun release() {
         stop()
-        try {
-            client.close()
-        } catch (e: Exception) {
-            // ignore
-        }
+        aiService.close()
         scope.cancel()
     }
 
     companion object {
         private const val NO_VOICE_DELAY_MS = 300L
         private const val ERROR_RETRY_DELAY_MS = 1_500L
+        const val MAX_CONSECUTIVE_FAILURES = 3
     }
 }

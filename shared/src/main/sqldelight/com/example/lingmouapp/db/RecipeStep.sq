@@ -1,0 +1,37 @@
+-- 菜谱步骤：隶属于某条 Recipe。这里用普通列而不是 FOREIGN KEY 约束，
+-- 是为了让「先删父再删子」的清理顺序完全由仓库层控制，避免级联行为在不同
+-- SQLite 版本/驱动上不一致（Android 驱动与 JDBC 驱动的 PRAGMA 默认值不同）。
+CREATE TABLE RecipeStep (
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    recipeId INTEGER NOT NULL,
+    -- 从 1 开始的步骤序号
+    stepIndex INTEGER NOT NULL,
+    instruction TEXT NOT NULL,
+    -- 原始文字稿里出现的时长提示，例如「15分钟」；没有则为空串
+    durationHint TEXT NOT NULL DEFAULT ''
+);
+
+selectAll:
+SELECT *
+FROM RecipeStep
+ORDER BY recipeId ASC, stepIndex ASC;
+
+selectByRecipe:
+SELECT *
+FROM RecipeStep
+WHERE recipeId = ?
+ORDER BY stepIndex ASC;
+
+countAll:
+SELECT count(*) FROM RecipeStep;
+
+insert:
+INSERT INTO RecipeStep(recipeId, stepIndex, instruction, durationHint)
+VALUES (?, ?, ?, ?);
+
+deleteByRecipe:
+DELETE FROM RecipeStep
+WHERE recipeId = ?;
+
+deleteAll:
+DELETE FROM RecipeStep;

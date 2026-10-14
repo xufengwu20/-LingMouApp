@@ -45,19 +45,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** 让前台服务按当前模式重新装配一次（切换 ASR 后端时用） */
-    private fun restartEngine() {
-        val mode = state.value.mode
-        if (mode != AppMode.DO_NOT_DISTURB) {
-            LingMouForegroundService.start(getApplication(), mode)
+    /**
+     * 打开云端识别（从麦克风录音并上传，识别文本通过 [LingMouEngine] 回调进状态）。
+     *
+     * **没有配置 SILICONFLOW_API_KEY 时不会报错、不会崩、不会卡住** ——
+     * [LingMouEngine.startAsr] 会自动改用系统内置识别，并在界面上写明降级原因。
+     * 云端连续失败时同样会自动降级。
+     */
+    fun startCloudAsr() {
+        LingMouEngine.allowCloudAsrRetry()
+        LingMouEngine.setPreferCloudAsr(true)
+        LingMouEngine.startAsr(preferCloud = true, source = "云端识别开关")
+    }
+
+    /** 关闭云端识别：当前模式还需要麦克风就切回系统内置识别，否则直接释放 */
+    fun stopCloudAsr() {
+        LingMouEngine.setPreferCloudAsr(false)
+        if (state.value.mode.usesMicrophone) {
+            LingMouEngine.startAsr(preferCloud = false, source = "切回系统内置识别")
+        } else {
+            LingMouEngine.stopAsr()
         }
     }
 
+    /** 界面上那个开关的统一入口 */
     fun setPreferCloudAsr(enabled: Boolean) {
-        LingMouEngine.setPreferCloudAsr(enabled)
-        LingMouEngine.log(if (enabled) "语音后端切换为云端 ASR" else "语音后端切换为系统内置")
-        restartEngine()
+        if (enabled) startCloudAsr() else stopCloudAsr()
     }
+
+    /**
+     * 开关 AI 字幕。
+     *
+     * 字幕复用语音识别的原文（不额外占麦克风），所以开启时会确保识别在跑；
+     * 关掉字幕、切换模式、或识别停止时都会自动清空 captionText。
+     */
+    fun setCaptionEnabled(enabled: Boolean) = LingMouEngine.setCaptionEnabled(enabled)
+
+    // ---- 云端内容分析 + 知识库 ----
+
+    /** 用当前会话的文字稿生成学习笔记并落库 */
+    fun generateSummary() = LingMouEngine.generateSummary()
+
+    /** 用当前会话的文字稿抽取菜谱并落库 */
+    fun generateRecipe() = LingMouEngine.generateRecipe()
+
+    fun openKnowledgeBase() = LingMouEngine.setShowKnowledgeBase(true)
+
+    fun closeKnowledgeBase() = LingMouEngine.setShowKnowledgeBase(false)
+
+    fun deleteNote(id: Long) = LingMouEngine.deleteNote(id)
+
+    fun deleteRecipe(id: Long) = LingMouEngine.deleteRecipe(id)
 
     fun onCameraPermission(granted: Boolean) = LingMouEngine.setCameraPermission(granted)
 
@@ -73,7 +111,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun rewindMedia() = LingMouEngine.performMediaAction(MediaAction.REWIND, "界面手动触发", 10)
 
-    fun simulateSpeech(text: String) = LingMouEngine.onSpeechText(text)
+    /**
+     * 手动模拟一句话。
+     *
+     * 走的是 [LingMouEngine.runManualCommand]，也就是**纯本地指令通道**：
+     * 不经过麦克风、不经过云端 ASR、不读 API Key。识别后端没启动也照样能用。
+     */
+    fun simulateSpeech(text: String) = LingMouEngine.runManualCommand(text)
 
     fun runCommandSelfTest() = LingMouEngine.runCommandSelfTest()
 

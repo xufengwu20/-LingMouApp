@@ -1,0 +1,37 @@
+-- 分心记录：视线离开超时、有人靠近等都会记一条
+CREATE TABLE DistractionRecord (
+    id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    -- 关联的专注会话；不在专注会话内产生时为 -1
+    sessionId INTEGER NOT NULL DEFAULT -1,
+    happenedAt INTEGER NOT NULL,
+    -- 持续时长（毫秒）；非时长类事件记 0
+    awayMillis INTEGER NOT NULL DEFAULT 0,
+    faceCount INTEGER NOT NULL DEFAULT 0,
+    -- gaze_away / intruder
+    kind TEXT NOT NULL DEFAULT 'gaze_away'
+);
+
+selectAll:
+SELECT *
+FROM DistractionRecord
+ORDER BY happenedAt DESC;
+
+selectBySession:
+SELECT *
+FROM DistractionRecord
+WHERE sessionId = ?
+ORDER BY happenedAt ASC;
+
+countAll:
+SELECT count(*) FROM DistractionRecord;
+
+insert:
+INSERT INTO DistractionRecord(sessionId, happenedAt, awayMillis, faceCount, kind)
+VALUES (?, ?, ?, ?, ?);
+
+deleteById:
+DELETE FROM DistractionRecord
+WHERE id = ?;
+
+deleteAll:
+DELETE FROM DistractionRecord;
