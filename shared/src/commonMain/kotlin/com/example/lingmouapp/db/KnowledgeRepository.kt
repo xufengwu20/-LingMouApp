@@ -1,6 +1,7 @@
 package com.example.lingmouapp.db
 
 import com.example.lingmouapp.shared.RecipeStepDraft
+import com.example.lingmouapp.shared.currentTimeMillis
 
 /**
  * 平台无关的增删改查。
@@ -175,6 +176,6 @@ class KnowledgeRepository(private val database: LingMouDatabase) {
         const val MODE_FOCUS = "FOCUS"
         const val MODE_COOKING = "COOKING"
 
-        fun now(): Long = System.currentTimeMillis()
+        fun now(): Long = currentTimeMillis()
     }
 }

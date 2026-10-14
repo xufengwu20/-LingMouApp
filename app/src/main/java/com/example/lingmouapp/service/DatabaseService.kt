@@ -7,6 +7,9 @@ import com.example.lingmouapp.db.LingMouDatabase
 import com.example.lingmouapp.model.NoteItem
 import com.example.lingmouapp.model.RecipeItem
 import com.example.lingmouapp.shared.RecipeDraft
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /**
  * Android 侧的数据库入口。
@@ -107,7 +110,9 @@ object DatabaseService {
                     title = it.title,
                     content = it.content,
                     mode = it.mode,
-                    createdAt = it.createdAt
+                    createdAt = it.createdAt,
+                    // 时间文本由平台侧格式化：commonMain 里拿不到 java.time
+                    createdText = formatShortTime(it.createdAt)
                 )
             }
         } catch (e: Exception) {
@@ -130,7 +135,8 @@ object DatabaseService {
                             "${step.stepIndex}. ${step.instruction}（${step.durationHint}）"
                         }
                     },
-                    createdAt = recipe.createdAt
+                    createdAt = recipe.createdAt,
+                    createdText = formatShortTime(recipe.createdAt)
                 )
             }
         } catch (e: Exception) {
@@ -161,4 +167,10 @@ object DatabaseService {
     }
 
     private const val DEFAULT_LIMIT = 100
+
+    private val shortTimeFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("MM-dd HH:mm")
+
+    /** UI 模型里的时间文本在这里格式化（Android/JVM 有 java.time，commonMain 没有） */
+    private fun formatShortTime(millis: Long): String =
+        Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(shortTimeFormat)
 }

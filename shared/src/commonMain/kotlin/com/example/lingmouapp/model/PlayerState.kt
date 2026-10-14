@@ -26,7 +26,10 @@ data class PlayerState(
             val total = (ms / 1000).coerceAtLeast(0)
             val m = total / 60
             val s = total % 60
-            return "%02d:%02d".format(m, s)
+            // 不用 String.format：commonMain 里没有 JVM 的 "%02d".format(...)
+            val mm = m.toString().padStart(2, '0')
+            val ss = s.toString().padStart(2, '0')
+            return "$mm:$ss"
         }
     }
 }
