@@ -454,6 +454,47 @@ ColorOS 对后台应用管得很严。**如果定时提醒到点没响，九成�
 
 ---
 
+## 四·五、Windows 桌面端（:desktop，Compose for Desktop）
+
+与 Android 共用**同一套** Compose 组件（`shared/src/commonMain/.../ui`）、同一套模型、
+SQLDelight 仓库与**同一个本地指令闭环**（`LocalCommandRouter`）。
+平台差异只有三处，全部集中在 `:desktop`：
+
+| 能力 | Android | Windows 桌面端 |
+| --- | --- | --- |
+| 数据库驱动 | `AndroidSqliteDriver`（系统 SQLite） | `JvmFileDatabaseFactory`（sqlite-jdbc，落 `%USERPROFILE%/.lingmou/lingmou.db`） |
+| 定时提醒 | `AlarmManager`（杀进程也生效） | `ScheduledExecutorService`（仅进程存活期间有效） |
+| 媒体控制 | MediaSession 下发到别的播放器 | 内置占位播放器演示闭环（**未引入 JNativeHook**） |
+
+### 运行
+
+```powershell
+# 开发期直接跑（首次会下载 skiko 并解出原生库）
+& "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File ".toolchain\build.ps1" ":desktop:run"
+```
+
+启动时会往 stdout 打 `[LINGMOU-PROBE] ...` 冒烟证据：
+`headless=false` → `UI_COMPOSED_OK`（窗口创建、组合完成）→ `selfTestPassed=11/11`（本地指令闭环在
+桌面端全过）→ `PROBE_DONE`。拿到这些行即代表「UI 起来了、指令闭环可用」。
+
+### 桌面端明确不支持（UI 上逐条标注「当前平台暂不支持」，不是留白）
+
+人脸检测 / 视线追踪 / 头部动作（未接 ML Kit 或 OpenCV）、麦克风 ASR 与 AI 字幕、
+云端笔记 / 菜谱生成（未接 LLM 客户端）、跨应用媒体控制（MediaSession 是 Android 专有 API）、
+系统级定时提醒。落点：`PlatformCapabilities.WINDOWS.unsupported` → `PlatformSupportSection`
+与 `PermissionPanel` 两个组件负责渲染，Android 端这份清单为空，卡片只显示一句话。
+
+### 两个环境坑（已修，对真实用户同样有效）
+
+1. **skiko 原生库解压失败**（报 `java.io.IOException: 系统找不到指定的路径`）：
+   skiko 初始化会调 `Files.createTempDirectory("skiko", …)` 把原生库解压到临时目录，
+   受限环境会拦这一步。解法：构建期把 `skiko-windows-x64.dll` + `icudtl.dat` 解到工程内，
+   用 `-Dskiko.library.path` / `-Dskiko.data.path` 直接加载，完全跳过解压流程。
+2. **临时目录不可写**：`Main.kt` 的 `ensureUsableTempDir()` 会**真实试写一次**
+   （`canWrite()` 在受限环境里会假报 true），失败则退回启动目录下的 `.lingmou-tmp`。
+
+---
+
 ## 五、媒体会话排查（「没有可下发的目标」怎么办）
 
 「下发暂停」后占位播放器一定会跟着动，但要让**外部 App**真的暂停，需要几个条件同时成立。

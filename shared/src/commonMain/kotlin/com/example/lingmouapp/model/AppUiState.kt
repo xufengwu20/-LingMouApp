@@ -53,6 +53,12 @@ data class AppUiState(
     // 本地指令自检（完全不经过麦克风与 API Key）
     val commandSelfTests: List<CommandSelfTest> = emptyList(),
 
+    /**
+     * 当前平台支持哪些能力。
+     * 共享 UI 靠它决定在哪里标注「当前平台暂不支持」——组件本身不需要知道有哪些平台。
+     */
+    val capabilities: PlatformCapabilities = PlatformCapabilities.ANDROID,
+
     // 会话文字稿与知识库
     /** 当前会话累计到的文字稿条数（语音识别每出一句 +1） */
     val transcriptLines: Int = 0,

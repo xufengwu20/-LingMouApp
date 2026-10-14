@@ -18,6 +18,7 @@ import com.example.lingmouapp.ui.components.CameraSection
 import com.example.lingmouapp.ui.components.CaptionSection
 import com.example.lingmouapp.ui.components.KnowledgeSection
 import com.example.lingmouapp.ui.components.LogSection
+import com.example.lingmouapp.ui.components.PlatformSupportSection
 import com.example.lingmouapp.ui.components.ModeSelector
 import com.example.lingmouapp.ui.components.PermissionPanel
 import com.example.lingmouapp.ui.components.PlayerSection
@@ -86,6 +87,9 @@ fun MainScreen(
                 onGenerateSummary = onGenerateSummary,
                 onGenerateRecipe = onGenerateRecipe
             )
+
+            // 当前平台上用不了的能力，逐条明确标注（Android 端这份清单为空）
+            PlatformSupportSection(state = state)
 
             CameraSection(
                 state = state,

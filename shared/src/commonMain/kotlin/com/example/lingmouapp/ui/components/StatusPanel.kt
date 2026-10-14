@@ -84,7 +84,56 @@ fun PermissionPanel(
     onOpenExactAlarmSettings: () -> Unit,
     onOpenAppDetails: () -> Unit
 ) {
-    SectionCard(title = "权限体检") {
+    val caps = state.capabilities
+
+    SectionCard(title = if (caps.runtimePermissions) "权限体检" else "权限 · ${caps.platformName}") {
+        if (!caps.runtimePermissions) {
+            // 桌面端没有 Android 那套权限体系。这里必须**说清楚**，
+            // 而不是留一排永远是红字「未授予」的 Android 权限项让用户白折腾
+            //（尤其那些还写着「设置 → 通知与状态栏」的路径提示，在 Windows 上是误导）。
+            Text(
+                text = "当前平台暂不支持下列 Android 权限项：",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(
+                    "摄像头 / 麦克风运行时权限" to "桌面端本轮不接入摄像头与音频采集",
+                    "通知使用权（跨应用媒体控制）" to "MediaSession 是 Android 专有 API",
+                    "精确闹钟 SCHEDULE_EXACT_ALARM" to
+                        "桌面端用 ScheduledExecutorService，仅进程存活期间有效",
+                    "自启动 / 耗电管理（ColorOS）" to "Android 厂商后台限制，与 Windows 无关"
+                ).forEach { (title, reason) ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "· $title",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Text(
+                            text = "  当前平台暂不支持 —— $reason",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            HorizontalDivider()
+            Text(
+                text = "所以本区在桌面端不提供任何系统跳转按钮：点了也只会往日志里写一行记录，" +
+                    "不会打开任何设置页。桌面端真正可用的是下面的「本地指令闭环」与「知识库」。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(
+                onClick = onOpenAppDetails,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("应用详情（当前平台暂不支持）")
+            }
+            return@SectionCard
+        }
+
         PermissionLine("摄像头 CAMERA", state.cameraPermission)
         PermissionLine("麦克风 RECORD_AUDIO", state.audioPermission)
         PermissionLine("通知 POST_NOTIFICATIONS", state.notificationsEnabled)

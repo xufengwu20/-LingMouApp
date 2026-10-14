@@ -28,5 +28,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "LingMouApp"
 include(":app")
-// 平台无关的数据/领域层：Android 与未来的 Windows 桌面端共用
+// 平台无关的数据/领域层：Android 与 Windows 桌面端共用
 include(":shared")
+// Windows 桌面端（Compose for Desktop）
+include(":desktop")
