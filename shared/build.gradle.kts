@@ -4,6 +4,11 @@ plugins {
     // 顺序重要：先 AGP library，再 KMP —— 这是 KMP + Android 的官方推荐顺序
     id("com.android.library")
     id("org.jetbrains.kotlin.multiplatform")
+    // Kotlin 2.x 的 Compose 编译器插件（版本跟随 Kotlin）
+    id("org.jetbrains.kotlin.plugin.compose")
+    // Compose Multiplatform：提供 compose.runtime/foundation/material3 这些依赖别名，
+    // 并且在 Android 侧重定向到对应的 androidx 构件（不会重复打包）
+    id("org.jetbrains.compose")
     id("app.cash.sqldelight")
 }
 
@@ -35,6 +40,12 @@ kotlin {
         commonMain.dependencies {
             // api：让 :app / :desktop 都能直接用到 SqlDriver、Query 等类型
             api(libs.sqldelight.runtime)
+
+            // 共享 UI。CMP 的 material3/foundation 在 Android 侧会解析到
+            // androidx 的同名构件，所以 :app 的 Compose BOM 不会被重复引入。
+            implementation(compose.runtime)
+            implementation(compose.foundation)
+            implementation(compose.material3)
         }
 
         androidMain.dependencies {

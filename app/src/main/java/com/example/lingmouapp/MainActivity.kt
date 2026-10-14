@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.lingmouapp.service.SystemSettingsNavigator
+import com.example.lingmouapp.ui.AndroidCameraPreview
 import com.example.lingmouapp.ui.KnowledgeScreen
 import com.example.lingmouapp.ui.MainScreen
 import com.example.lingmouapp.ui.theme.LingMouTheme
@@ -55,7 +56,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             LingMouTheme {
                 val state by viewModel.state.collectAsStateWithLifecycle()
-                val preview by viewModel.preview.collectAsStateWithLifecycle()
 
                 // 两个页面用状态位切换，没有引入 Navigation Compose
                 if (state.showKnowledgeBase) {
@@ -69,7 +69,7 @@ class MainActivity : ComponentActivity() {
                 } else {
                     MainScreen(
                         state = state,
-                        preview = preview,
+                        previewSlot = { AndroidCameraPreview(viewModel) },
                         onSelectMode = viewModel::selectMode,
                         onRequestPermissions = { requestRuntimePermissions() },
                         onOpenNotificationAccess = { jumpToNotificationAccess() },

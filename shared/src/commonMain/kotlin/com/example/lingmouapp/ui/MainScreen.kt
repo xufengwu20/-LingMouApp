@@ -1,6 +1,5 @@
 package com.example.lingmouapp.ui
 
-import androidx.camera.core.Preview
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,7 +28,7 @@ import com.example.lingmouapp.ui.components.StatusPanel
 @Composable
 fun MainScreen(
     state: AppUiState,
-    preview: Preview?,
+    previewSlot: (@Composable () -> Unit)? = null,
     onSelectMode: (AppMode) -> Unit,
     onRequestPermissions: () -> Unit,
     onOpenNotificationAccess: () -> Unit,
@@ -88,7 +87,10 @@ fun MainScreen(
                 onGenerateRecipe = onGenerateRecipe
             )
 
-            CameraSection(state = state, preview = preview)
+            CameraSection(
+                state = state,
+                previewSlot = previewSlot
+            )
 
             PlayerSection(
                 state = state,

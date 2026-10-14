@@ -12,6 +12,9 @@ coroutines = "1.10.2"
 serializationJson = "1.9.0"
 junit = "4.13.2"
 sqldelight = "2.2.1"
+# Compose Multiplatform。选 1.9.x 是因为它对应 Kotlin 2.2 一代；
+# 1.10+ 面向 Kotlin 2.3/2.4，与本工程的 Kotlin 2.2.21 不匹配。
+composeMultiplatform = "1.9.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -57,3 +60,4 @@ kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref 
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
+compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }

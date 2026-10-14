@@ -1,15 +1,11 @@
 package com.example.lingmouapp.ui.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 
 private val LightColors = lightColorScheme(
     primary = TealDeep,
@@ -43,19 +39,20 @@ private val DarkColors = darkColorScheme(
     error = Rose
 )
 
+/**
+ * 品牌配色，Android 与 Windows 共用。
+ *
+ * **故意不支持 Material You 动态取色**：`dynamicLightColorScheme(context)`
+ * 需要 Android 的 Context，而 commonMain 里拿不到。为了两个平台共用同一套主题，
+ * 这里只提供固定配色 —— 代价是 Android 少了个性化取色，换来的是界面代码零分支。
+ */
 @Composable
 fun LingMouTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> DarkColors
-        else -> LightColors
-    }
-    MaterialTheme(colorScheme = colorScheme, content = content)
+    MaterialTheme(
+        colorScheme = if (darkTheme) DarkColors else LightColors,
+        content = content
+    )
 }
