@@ -118,6 +118,11 @@ object LingMouEngine {
     }
 
     fun log(message: String) {
+        // 关键节点日志必须进 logcat（adb logcat -s LingMouEngine）：
+        // 新 UI 移除了应用内日志面板，如果只写 StateFlow，
+        // 真机上「收到什么文本、解析成什么、会话列表」全部看不见，
+        // 语音链路一断就完全无法定位。
+        Log.i(TAG, message)
         val line = "${LocalTime.now().format(clockFormat)}  $message"
         _state.update { state -> state.copy(log = (listOf(line) + state.log).take(MAX_LOG_LINES)) }
     }

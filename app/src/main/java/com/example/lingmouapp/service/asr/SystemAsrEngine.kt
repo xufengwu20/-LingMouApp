@@ -8,6 +8,7 @@ import android.os.Looper
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import java.util.Locale
 
 /**
@@ -35,15 +36,20 @@ class SystemAsrEngine(private val context: Context) : AsrEngine {
     private val listener = object : RecognitionListener {
 
         override fun onReadyForSpeech(params: Bundle?) = Unit
-        override fun onBeginningOfSpeech() = Unit
+        override fun onBeginningOfSpeech() {
+            Log.i(TAG, "检测到说话开始")
+        }
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit
-        override fun onEndOfSpeech() = Unit
+        override fun onEndOfSpeech() {
+            Log.i(TAG, "说话结束，等待识别结果")
+        }
         override fun onPartialResults(partialResults: Bundle?) = Unit
         override fun onEvent(eventType: Int, params: Bundle?) = Unit
 
         override fun onError(error: Int) {
             if (!isListening) return
+            Log.w(TAG, "onError 错误码=$error（${errorName(error)}）")
             when (error) {
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
                     isListening = false
@@ -60,6 +66,8 @@ class SystemAsrEngine(private val context: Context) : AsrEngine {
         override fun onResults(results: Bundle?) {
             val texts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
             val best = texts?.firstOrNull()?.trim().orEmpty()
+            // 关键节点：识别文本 → 上抛（不管识别出什么都要能看见）
+            Log.i(TAG, "识别结果（${texts?.size ?: 0} 条）：「$best」")
             if (best.isNotEmpty()) onTextCallback?.invoke(best)
             if (isListening) scheduleRestart()
         }
@@ -93,10 +101,25 @@ class SystemAsrEngine(private val context: Context) : AsrEngine {
         if (!isListening) return
         val engine = recognizer ?: return
         try {
+            Log.i(TAG, "startListening（第 N 轮）")
             engine.startListening(buildIntent())
         } catch (e: Exception) {
+            Log.w(TAG, "startListening 异常：${e.javaClass.simpleName} ${e.message}")
             scheduleRestart()
         }
+    }
+
+    private fun errorName(code: Int): String = when (code) {
+        SpeechRecognizer.ERROR_AUDIO -> "ERROR_AUDIO(音频错误)"
+        SpeechRecognizer.ERROR_CLIENT -> "ERROR_CLIENT"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "ERROR_INSUFFICIENT_PERMISSIONS"
+        SpeechRecognizer.ERROR_NETWORK -> "ERROR_NETWORK"
+        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "ERROR_NETWORK_TIMEOUT"
+        SpeechRecognizer.ERROR_NO_MATCH -> "ERROR_NO_MATCH(没听清)"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "ERROR_RECOGNIZER_BUSY(引擎忙)"
+        SpeechRecognizer.ERROR_SERVER -> "ERROR_SERVER"
+        SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "ERROR_SPEECH_TIMEOUT(说话超时)"
+        else -> "未知($code)"
     }
 
     private fun scheduleRestart() {
@@ -144,6 +167,8 @@ class SystemAsrEngine(private val context: Context) : AsrEngine {
     }
 
     companion object {
+        /** logcat 过滤：adb logcat -s LingMouSysAsr */
+        const val TAG = "LingMouSysAsr"
         private const val RESTART_DELAY_MS = 400L
     }
 }

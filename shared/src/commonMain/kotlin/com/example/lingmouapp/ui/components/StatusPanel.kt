@@ -39,6 +39,10 @@ fun StatusPanel(state: AppUiState) {
             color = MaterialTheme.colorScheme.primary
         )
 
+        // 语音链路可观测性：最近识别原文 + 解析结果（真机排查「暂停没生效」用）
+        InfoRow("最近识别", state.lastTranscript.ifBlank { "—" })
+        InfoRow("解析结果", state.lastCommand.ifBlank { "—" })
+
         when (state.mode) {
             AppMode.FOCUS -> {
                 if (caps.faceDetection) {

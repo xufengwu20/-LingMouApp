@@ -1,5 +1,6 @@
 package com.example.lingmouapp.service.asr
 
+import android.util.Log
 import com.example.lingmouapp.service.AIService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -64,9 +65,12 @@ class SiliconFlowAsrEngine(
                     continue
                 }
 
+                // 关键节点：录音 → 上传
+                Log.i(AIService.TAG, "已录到一句（${wav.size} 字节）→ 上传转写")
                 aiService.transcribeWav(wav).fold(
                     onSuccess = { text ->
                         consecutiveFailures = 0
+                        Log.i(AIService.TAG, "转写结果：「$text」")
                         if (text.isNotBlank()) onText(text)
                     },
                     onFailure = { error ->
