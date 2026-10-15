@@ -24,7 +24,7 @@ private enum class MainTab { MODE, USER }
 /**
  * 应用外壳：底部导航栏 + 两个 Tab。
  *
- *   - 模式：三模式切换、状态显示、视频占位区、字幕
+ *   - 模式：三模式切换、状态显示、视频占位区
  *   - 用户：个人信息占位、我的笔记/食谱（列表→详情）、权限管理
  *
  * Tab 状态与详情页状态是纯 UI 状态，用 remember 保存在这里，
@@ -35,7 +35,6 @@ fun AppShell(
     state: AppUiState,
     previewSlot: (@Composable () -> Unit)? = null,
     onSelectMode: (AppMode) -> Unit,
-    onToggleCaption: (Boolean) -> Unit,
     onRefreshKnowledge: () -> Unit,
     onRequestRuntimePermissions: () -> Unit,
     onOpenNotificationAccess: () -> Unit,
@@ -74,8 +73,7 @@ fun AppShell(
                 state = state,
                 modifier = contentModifier,
                 previewSlot = previewSlot,
-                onSelectMode = onSelectMode,
-                onToggleCaption = onToggleCaption
+                onSelectMode = onSelectMode
             )
             MainTab.USER -> UserTab(
                 state = state,

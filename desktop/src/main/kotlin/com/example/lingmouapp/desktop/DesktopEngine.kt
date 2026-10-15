@@ -45,7 +45,6 @@ object DesktopEngine {
             capabilities = PlatformCapabilities.WINDOWS,
             mediaSessionSummary = "当前平台暂不支持",
             asrNote = "当前平台暂不支持麦克风语音识别",
-            captionNote = "当前平台暂不支持",
             player = PlayerState(title = "桌面占位播放器", isPlaying = false)
         )
     )
@@ -368,16 +367,7 @@ object DesktopEngine {
 
     // ------------------------------------------------------------------ 其他
 
-    fun setCaptionEnabled(enabled: Boolean) {
-        update {
-            it.copy(
-                captionEnabled = false,
-                captionText = "",
-                captionNote = "当前平台暂不支持（桌面端未接入音频采集）"
-            )
-        }
-        notSupported("AI 字幕")
-    }
+
 
     fun setPreferCloudAsr(enabled: Boolean) {
         update { it.copy(preferCloudAsr = false, asrNote = "当前平台暂不支持") }

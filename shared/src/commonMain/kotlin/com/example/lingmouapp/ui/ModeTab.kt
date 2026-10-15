@@ -15,13 +15,12 @@ import androidx.compose.ui.unit.dp
 import com.example.lingmouapp.model.AppMode
 import com.example.lingmouapp.model.AppUiState
 import com.example.lingmouapp.ui.components.CameraSection
-import com.example.lingmouapp.ui.components.CaptionSection
 import com.example.lingmouapp.ui.components.ModeSelector
 import com.example.lingmouapp.ui.components.PlayerSection
 import com.example.lingmouapp.ui.components.StatusPanel
 
 /**
- * 「模式」Tab 的内容：标题、三模式切换、状态、视频占位区、字幕。
+ * 「模式」Tab 的内容：标题、三模式切换、状态、视频占位区。
  * 自身不带 Scaffold —— 外壳由 [AppShell] 提供（底部导航栏）。
  */
 @Composable
@@ -29,8 +28,7 @@ fun ModeTab(
     state: AppUiState,
     modifier: Modifier = Modifier,
     previewSlot: (@Composable () -> Unit)? = null,
-    onSelectMode: (AppMode) -> Unit,
-    onToggleCaption: (Boolean) -> Unit
+    onSelectMode: (AppMode) -> Unit
 ) {
     Column(
         modifier = modifier
@@ -65,10 +63,5 @@ fun ModeTab(
 
         // ---------------- 视频播放区 ----------------
         PlayerSection(state = state)
-
-        // ---------------- AI 字幕（仅烹饪模式） ----------------
-        if (state.mode == AppMode.COOKING) {
-            CaptionSection(state = state, onToggleCaption = onToggleCaption)
-        }
     }
 }

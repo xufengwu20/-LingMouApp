@@ -148,11 +148,6 @@ object LingMouEngine {
         if (mode != AppMode.DO_NOT_DISTURB) {
             startSession(mode)
         }
-
-        // 需求：退出烹饪模式 / 切换模式时必须停止字幕识别并清空状态。
-        if (_state.value.captionEnabled) {
-            stopCaption("切换模式 ${previous.label} → ${mode.label}")
-        }
     }
 
     fun setEngineRunning(running: Boolean) = update { it.copy(engineRunning = running) }
@@ -475,17 +470,11 @@ object LingMouEngine {
     @Synchronized
     fun stopAsr() {
         releaseAsr()
-        val captionsWereOn = _state.value.captionEnabled
         update {
             it.copy(
                 asrRunning = false,
                 asrBackend = "未启动",
-                microphoneState = if (it.mode.usesMicrophone) "已关闭" else it.microphoneState,
-                // 字幕的数据源就是语音识别，识别一停字幕就无源可依 ——
-                // 一起收掉，避免界面停在上一条文本造成「还在识别」的错觉。
-                captionEnabled = false,
-                captionText = "",
-                captionNote = if (captionsWereOn) "语音识别已停止，字幕随之关闭" else it.captionNote
+                microphoneState = if (it.mode.usesMicrophone) "已关闭" else it.microphoneState
             )
         }
     }
@@ -525,54 +514,6 @@ object LingMouEngine {
     private fun hasAudioPermission(ctx: Context): Boolean =
         ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
-
-    // ---------------------------------------------------------------- AI 字幕
-
-    /**
-     * 开关 AI 字幕。
-     *
-     * 设计取舍：字幕**没有独立的识别通道**，它的数据来源就是语音识别的原文 ——
-     * 否则就要开第二个 AudioRecord，和识别器抢麦克风。
-     * 因此开启字幕时若识别没在跑，会顺手把它拉起来；拉不起来的原因会如实写进 captionNote。
-     *
-     * @param enabled true 开启并确保识别在跑；false 关闭并清空
-     */
-    @Synchronized
-    fun setCaptionEnabled(enabled: Boolean) {
-        if (enabled == _state.value.captionEnabled) return
-
-        if (!enabled) {
-            stopCaption("用户手动关闭")
-            return
-        }
-
-        update { it.copy(captionEnabled = true, captionText = "", captionNote = "") }
-        log("[字幕] 已开启（数据来源：${_state.value.asrBackend}）")
-
-        if (!_state.value.asrRunning) {
-            startAsr(preferCloud = _state.value.preferCloudAsr, source = "AI 字幕")
-        }
-
-        // 把启动过程中的降级 / 报错同步给字幕区，避免用户看着空白字幕不知道发生了什么
-        val note = _state.value.asrNote
-        if (note.isNotBlank()) {
-            update { it.copy(captionNote = note) }
-        }
-        if (!_state.value.asrRunning) {
-            update { it.copy(captionNote = "语音识别未启动，字幕不会有内容", captionText = "") }
-        }
-    }
-
-    /** 关闭字幕并清空文本。模式切换、语音识别停止、用户手动关闭都会走这里。 */
-    @Synchronized
-    fun stopCaption(reason: String) {
-        val state = _state.value
-        if (!state.captionEnabled && state.captionText.isEmpty() && state.captionNote.isEmpty()) {
-            return
-        }
-        update { it.copy(captionEnabled = false, captionText = "", captionNote = "") }
-        log("[字幕] 已关闭（$reason）")
-    }
 
     // ---------------------------------------------------------------- 会话文字稿 & 知识库
 
@@ -690,7 +631,7 @@ object LingMouEngine {
         val label = if (kind == GenerationKind.SUMMARY) "学习笔记" else "菜谱"
 
         if (transcript.isBlank()) {
-            update { it.copy(generationNote = "还没有文字稿 —— 先开启语音（或 AI 字幕）让识别跑一会儿") }
+            update { it.copy(generationNote = "还没有文字稿 —— 先开启语音让识别跑一会儿") }
             log("[生成] 文字稿为空，未调用 LLM")
             return
         }
@@ -806,12 +747,6 @@ object LingMouEngine {
     fun onSpeechText(text: String) = executeLocal(text, SOURCE_SPEECH, fromSpeech = true)
 
     private fun executeLocal(text: String, source: String, fromSpeech: Boolean) {
-        // AI 字幕：语音识别的原文在进入指令解析之前就先推给字幕区，
-        // 这样即使这句话不是控制指令，字幕也能正常显示。
-        if (fromSpeech && _state.value.captionEnabled) {
-            update { it.copy(captionText = text) }
-        }
-
         // 会话文字稿：只有真正的语音识别结果才计入（手动模拟不算，
         // 否则「手动输入的文字」会污染总结内容）。
         if (fromSpeech) {

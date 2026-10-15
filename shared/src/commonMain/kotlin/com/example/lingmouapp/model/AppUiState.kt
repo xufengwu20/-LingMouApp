@@ -43,13 +43,6 @@ data class AppUiState(
     val mediaSessionCount: Int = 0,
     val player: PlayerState = PlayerState(),
 
-    // AI 字幕（数据来源就是语音识别的原文，不额外占用麦克风）
-    val captionEnabled: Boolean = false,
-    /** 实时字幕文本；未开启时恒为空 */
-    val captionText: String = "",
-    /** 字幕相关的提示（为什么开启失败 / 为什么被关掉） */
-    val captionNote: String = "",
-
     // 本地指令自检（完全不经过麦克风与 API Key）
     val commandSelfTests: List<CommandSelfTest> = emptyList(),
 

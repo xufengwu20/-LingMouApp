@@ -85,7 +85,7 @@ data class PlatformCapabilities(
                     "依赖人脸关键点，随人脸检测一并暂不支持"
                 ),
                 UnsupportedFeature(
-                    "麦克风语音识别（含 AI 字幕）",
+                    "麦克风语音识别",
                     "桌面端未接入音频采集与云端 ASR"
                 ),
                 UnsupportedFeature(

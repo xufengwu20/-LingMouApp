@@ -76,14 +76,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (enabled) startCloudAsr() else stopCloudAsr()
     }
 
-    /**
-     * 开关 AI 字幕。
-     *
-     * 字幕复用语音识别的原文（不额外占麦克风），所以开启时会确保识别在跑；
-     * 关掉字幕、切换模式、或识别停止时都会自动清空 captionText。
-     */
-    fun setCaptionEnabled(enabled: Boolean) = LingMouEngine.setCaptionEnabled(enabled)
-
     // ---- 云端内容分析 + 知识库 ----
 
     /** 用当前会话的文字稿生成学习笔记并落库 */

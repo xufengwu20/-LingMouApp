@@ -61,7 +61,6 @@ class MainActivity : ComponentActivity() {
                     state = state,
                     previewSlot = { AndroidCameraPreview(viewModel) },
                     onSelectMode = viewModel::selectMode,
-                    onToggleCaption = viewModel::setCaptionEnabled,
                     onRefreshKnowledge = viewModel::refreshKnowledge,
                     onRequestRuntimePermissions = { requestRuntimePermissions() },
                     onOpenNotificationAccess = { jumpToNotificationAccess() },

@@ -128,7 +128,6 @@ fun main() {
                     // 桌面端没有人脸检测 → 相机区域自动显示「当前平台暂不支持人脸检测」
                     previewSlot = null,
                     onSelectMode = { DesktopEngine.setMode(it) },
-                    onToggleCaption = { DesktopEngine.setCaptionEnabled(it) },
                     onRefreshKnowledge = { DesktopEngine.refreshKnowledge() },
                     onRequestRuntimePermissions = { DesktopEngine.notSupported("运行时权限（桌面端不需要）") },
                     onOpenNotificationAccess = { DesktopEngine.notSupported("通知使用权设置") },
