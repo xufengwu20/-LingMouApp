@@ -85,25 +85,28 @@ val extractSkikoNative by tasks.registering {
         outDir.mkdirs()
         val wanted = setOf("skiko-windows-x64.dll", "icudtl.dat")
         val found = mutableSetOf<String>()
-        runtimeCp.get().forEach { jar ->
-            if (!jar.name.contains("skiko")) return@forEach
+        // 用普通 for 循环而不是 forEach + return@label：
+        // 嵌套 forEach 的标签极易写错（label 只能挂在 lambda 上），
+        // 这里有过一次「标签贴错导致整个构建脚本编译失败」的教训。
+        for (jar in runtimeCp.get()) {
+            if (!jar.name.contains("skiko")) continue
             ZipFile(jar).use { zf ->
-                entriesLoop@ zf.entries().asSequence()
+                val entries = zf.entries().asSequence()
                     .filter { it.name.substringAfterLast('/') in wanted }
-                    .forEach { entry ->
-                        val shortName = entry.name.substringAfterLast('/')
-                        val target = File(outDir, shortName)
-                        // 已存在且大小一致就跳过重写：正在运行的桌面实例会占用这个 dll，
-                        // 直接覆盖会抛 FileNotFoundException（文件被另一个进程使用）。
-                        if (target.exists() && target.length() == entry.size) {
-                            found += shortName
-                            return@entriesLoop
-                        }
-                        zf.getInputStream(entry).use { input ->
-                            target.outputStream().use { output -> input.copyTo(output) }
-                        }
+                for (entry in entries) {
+                    val shortName = entry.name.substringAfterLast('/')
+                    val target = File(outDir, shortName)
+                    // 已存在且大小一致就跳过重写：正在运行的桌面实例会占用这个 dll，
+                    // 直接覆盖会抛 FileNotFoundException（文件被另一个进程使用）。
+                    if (target.exists() && target.length() == entry.size) {
                         found += shortName
+                        continue
                     }
+                    zf.getInputStream(entry).use { input ->
+                        target.outputStream().use { output -> input.copyTo(output) }
+                    }
+                    found += shortName
+                }
             }
         }
         println("[skiko] 已解出: ${found.joinToString()} -> ${outDir.absolutePath}")

@@ -138,31 +138,8 @@ fun main() {
                         // 桌面端没有人脸检测 → 相机区域自动显示「当前平台暂不支持人脸检测」
                         previewSlot = null,
                         onSelectMode = { DesktopEngine.setMode(it) },
-
-                        // 下面这些在桌面端都没有对应物，点下去会写日志并在界面标注
-                        onRequestPermissions = { DesktopEngine.notSupported("运行时权限（桌面端不需要）") },
-                        onOpenNotificationAccess = { DesktopEngine.notSupported("通知使用权设置") },
-                        onOpenExactAlarmSettings = { DesktopEngine.notSupported("精确闹钟设置") },
-                        onOpenAppDetails = { DesktopEngine.notSupported("应用详情页") },
-
-                        onToggleCloudAsr = { DesktopEngine.setPreferCloudAsr(it) },
-                        onToggleCaption = { DesktopEngine.setCaptionEnabled(it) },
-
                         onOpenKnowledgeBase = { DesktopEngine.setShowKnowledgeBase(true) },
-                        onGenerateSummary = { DesktopEngine.generateSummary() },
-                        onGenerateRecipe = { DesktopEngine.generateRecipe() },
-
-                        // 占位播放器：闭环在本地可见地跑通
-                        onTogglePlayer = { DesktopEngine.togglePlayer() },
-                        onPauseMedia = { DesktopEngine.pauseMedia() },
-                        onPlayMedia = { DesktopEngine.playMedia() },
-                        onRewindMedia = { DesktopEngine.rewindMedia() },
-
-                        onSimulateSpeech = { DesktopEngine.runManualCommand(it) },
-                        onRunSelfTest = { DesktopEngine.runSelfTest() },
-                        onRefreshMediaSession = { DesktopEngine.refreshMediaSession() },
-                        onCancelReminder = { DesktopEngine.cancelReminder(it) },
-                        onClearLog = { DesktopEngine.clearLog() }
+                        onToggleCaption = { DesktopEngine.setCaptionEnabled(it) }
                     )
                 }
             }

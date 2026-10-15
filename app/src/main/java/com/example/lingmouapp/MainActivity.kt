@@ -71,24 +71,8 @@ class MainActivity : ComponentActivity() {
                         state = state,
                         previewSlot = { AndroidCameraPreview(viewModel) },
                         onSelectMode = viewModel::selectMode,
-                        onRequestPermissions = { requestRuntimePermissions() },
-                        onOpenNotificationAccess = { jumpToNotificationAccess() },
-                        onOpenExactAlarmSettings = { jumpToExactAlarm() },
-                        onOpenAppDetails = { openAppDetails() },
-                        onToggleCloudAsr = viewModel::setPreferCloudAsr,
-                        onToggleCaption = viewModel::setCaptionEnabled,
                         onOpenKnowledgeBase = viewModel::openKnowledgeBase,
-                        onGenerateSummary = viewModel::generateSummary,
-                        onGenerateRecipe = viewModel::generateRecipe,
-                        onTogglePlayer = viewModel::togglePlayer,
-                        onPauseMedia = viewModel::pauseMedia,
-                        onPlayMedia = viewModel::playMedia,
-                        onRewindMedia = viewModel::rewindMedia,
-                        onSimulateSpeech = viewModel::simulateSpeech,
-                        onRunSelfTest = viewModel::runCommandSelfTest,
-                        onRefreshMediaSession = viewModel::refreshMediaSession,
-                        onCancelReminder = viewModel::cancelReminder,
-                        onClearLog = viewModel::clearLog
+                        onToggleCaption = viewModel::setCaptionEnabled
                     )
                 }
             }

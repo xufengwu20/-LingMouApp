@@ -18,15 +18,10 @@ import androidx.compose.ui.unit.dp
 import com.example.lingmouapp.model.AppUiState
 
 /**
- * AI 字幕。
+ * AI 字幕（仅烹饪模式显示）。
  *
- * 显示区刻意做成「一块板子」的样子，紧跟在视频占位区下方：
- *   - 未开启 → 「字幕未开启」
- *   - 已开启无文本 → 聆听提示
- *   - 已开启有文本 → 实时识别原文
- *
- * 字幕的数据来源就是语音识别的原文（见 LingMouEngine.executeLocal），
- * 不额外开 AudioRecord，所以不会和识别器抢麦克风。
+ * 保留：开启/关闭按钮 + 字幕显示区 + 失败原因的简短提示。
+ * 移除：识别后端名、字幕数据来源、长篇说明等调试信息。
  */
 @Composable
 fun CaptionSection(
@@ -41,7 +36,6 @@ fun CaptionSection(
             Text(if (state.captionEnabled) "关闭字幕" else "开启字幕")
         }
 
-        // ---- 字幕显示区 ----
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -56,7 +50,7 @@ fun CaptionSection(
                 text = when {
                     !state.captionEnabled -> "字幕未开启"
                     showingLive -> state.captionText
-                    else -> "字幕已开启 · 正在聆听…\n（说完一句后停顿一下，识别完成才会显示）"
+                    else -> "字幕已开启 · 正在聆听…"
                 },
                 style = if (showingLive) {
                     MaterialTheme.typography.titleMedium
@@ -72,9 +66,6 @@ fun CaptionSection(
             )
         }
 
-        BlockRow("字幕状态", if (state.captionEnabled) "已开启" else "已关闭")
-        BlockRow("字幕数据来源", state.asrBackend)
-
         if (state.captionNote.isNotBlank()) {
             Text(
                 text = state.captionNote,
@@ -82,12 +73,5 @@ fun CaptionSection(
                 color = MaterialTheme.colorScheme.error
             )
         }
-
-        Text(
-            text = "字幕复用语音识别的原文，只在识别运行时才有内容；" +
-                "切换模式或关闭识别会自动关闭字幕并清空文本。",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
