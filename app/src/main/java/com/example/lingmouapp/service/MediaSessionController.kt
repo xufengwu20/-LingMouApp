@@ -57,14 +57,40 @@ class MediaSessionController(private val context: Context) {
      */
     private fun query(): Query {
         val m = manager ?: return Query(emptyList(), "no_service")
-        if (!hasNotificationAccess()) return Query(emptyList(), "no_permission")
+        if (!hasNotificationAccess()) {
+            Log.w(TAG, "getActiveSessions 前置检查失败：通知使用权未授予（系统设置里未勾选灵眸）")
+            return Query(emptyList(), "no_permission")
+        }
         return try {
-            Query(m.getActiveSessions(listenerComponent()), null)
+            val list = m.getActiveSessions(listenerComponent())
+            val detail = list.joinToString("；") {
+                "${it.packageName ?: "?"}=${stateName(it.playbackState?.state)}"
+            }
+            // 关键节点：把「拿到了哪些会话 + 监听服务是否真的连着」打出来
+            if (list.isEmpty()) {
+                Log.w(
+                    TAG,
+                    "getActiveSessions 返回空列表 ｜ 监听服务已连接=${MediaNotificationListener.connected}。" +
+                        if (MediaNotificationListener.connected) {
+                            "若确实在播放媒体仍为空：目标 App 未发布 MediaSession"
+                        } else {
+                            "监听服务没连着（重启/系统回收导致）→ 去通知使用权把灵眸关掉再打开"
+                        }
+                )
+            } else {
+                Log.i(
+                    TAG,
+                    "getActiveSessions 返回 ${list.size} 个会话：$detail ｜ 监听服务已连接=${MediaNotificationListener.connected}"
+                )
+            }
+            Query(list, null)
         } catch (e: SecurityException) {
             lastQueryError = e.message ?: "SecurityException"
+            Log.w(TAG, "getActiveSessions 抛 SecurityException：${e.message} —— 系统不认监听组件（把通知使用权关掉再打开一次）")
             Query(emptyList(), "security")
         } catch (e: Exception) {
             lastQueryError = e.message ?: e.javaClass.simpleName
+            Log.w(TAG, "getActiveSessions 异常：${e.javaClass.simpleName} ${e.message}")
             Query(emptyList(), "error")
         }
     }
@@ -223,12 +249,14 @@ class MediaSessionController(private val context: Context) {
             return false
         }
         val pkg = c.packageName
+        val beforeState = stateName(c.playbackState?.state)
         return try {
             c.transportControls.pause()
-            Log.i(TAG, "已向 $pkg 下发 pause（state=${stateName(c.playbackState?.state)}）")
+            Log.i(TAG, "已向 $pkg 下发 pause（下发前 state=$beforeState）")
+            verifyAfterDispatch(pkg, "pause", beforeState, c.playbackState?.position)
             true
         } catch (e: Exception) {
-            Log.w(TAG, "向 $pkg 下发 pause 失败：${e.javaClass.simpleName} ${e.message}")
+            Log.w(TAG, "向 $pkg 下发 pause 异常（未被吞掉，这里打印）：${e.javaClass.simpleName} ${e.message}")
             false
         }
     }
@@ -240,12 +268,14 @@ class MediaSessionController(private val context: Context) {
             return false
         }
         val pkg = c.packageName
+        val beforeState = stateName(c.playbackState?.state)
         return try {
             c.transportControls.play()
-            Log.i(TAG, "已向 $pkg 下发 play（state=${stateName(c.playbackState?.state)}）")
+            Log.i(TAG, "已向 $pkg 下发 play（下发前 state=$beforeState）")
+            verifyAfterDispatch(pkg, "play", beforeState, c.playbackState?.position)
             true
         } catch (e: Exception) {
-            Log.w(TAG, "向 $pkg 下发 play 失败：${e.javaClass.simpleName} ${e.message}")
+            Log.w(TAG, "向 $pkg 下发 play 异常（未被吞掉，这里打印）：${e.javaClass.simpleName} ${e.message}")
             false
         }
     }
@@ -258,16 +288,47 @@ class MediaSessionController(private val context: Context) {
             return false
         }
         val pkg = c.packageName
+        val position = c.playbackState?.position ?: 0L
         return try {
-            val position = c.playbackState?.position ?: 0L
             val target = (position - seconds * 1000L).coerceAtLeast(0L)
             c.transportControls.seekTo(target)
             Log.i(TAG, "已向 $pkg 下发 seekTo($target)（原位置 $position）")
+            verifyAfterDispatch(pkg, "seekTo", stateName(c.playbackState?.state), position)
             true
         } catch (e: Exception) {
-            Log.w(TAG, "向 $pkg 下发 seekTo 失败：${e.javaClass.simpleName} ${e.message}")
+            Log.w(TAG, "向 $pkg 下发 seekTo 异常（未被吞掉，这里打印）：${e.javaClass.simpleName} ${e.message}")
             false
         }
+    }
+
+    /**
+     * 下发后校验：TransportControls 的调用是异步 fire-and-forget，**不会**返回
+     * 「成功/失败」；目标 App 也完全可能静默忽略。唯一诚实的判断方式是稍等片刻
+     * 再查一次它的 playbackState，看状态/位置是否真的变了。
+     */
+    private fun verifyAfterDispatch(
+        pkg: String?,
+        actionName: String,
+        beforeState: String,
+        beforePosition: Long?
+    ) {
+        Handler(Looper.getMainLooper()).postDelayed({
+            val after = query().controllers.firstOrNull { it.packageName == pkg }
+            val afterState = stateName(after?.playbackState?.state)
+            val afterPosition = after?.playbackState?.position
+            val stateChanged = afterState != beforeState
+            val positionChanged =
+                beforePosition != null && afterPosition != null && afterPosition != beforePosition
+            Log.i(
+                TAG,
+                "[下发后校验] $pkg：$actionName 前=[$beforeState @ $beforePosition] 后=[$afterState @ $afterPosition] " +
+                    if (stateChanged || positionChanged) {
+                        "→ 状态/位置已变化 ✓（指令生效）"
+                    } else {
+                        "→ 状态未变化 ✗（目标 App 忽略了指令，或会话已消失）"
+                    }
+            )
+        }, DISPATCH_VERIFY_DELAY_MS)
     }
 
     // ------------------------------------------------------------------ 工具
@@ -289,6 +350,9 @@ class MediaSessionController(private val context: Context) {
     companion object {
         /** logcat 过滤：adb logcat -s LingMouMedia */
         const val TAG = "LingMouMedia"
+
+        /** 下发后隔多久复查目标状态（TransportControls 是异步的） */
+        private const val DISPATCH_VERIFY_DELAY_MS = 800L
 
         /** 这些包名可能是「媒体控制中心」之类的壳会话，不是真正在放视频的 App */
         private val SYSTEM_PACKAGES = setOf("android", "com.android.systemui")
