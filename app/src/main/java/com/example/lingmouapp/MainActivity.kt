@@ -17,8 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.lingmouapp.service.SystemSettingsNavigator
 import com.example.lingmouapp.ui.AndroidCameraPreview
-import com.example.lingmouapp.ui.KnowledgeScreen
-import com.example.lingmouapp.ui.MainScreen
+import com.example.lingmouapp.ui.AppShell
 import com.example.lingmouapp.ui.theme.LingMouTheme
 import com.example.lingmouapp.viewmodel.MainViewModel
 
@@ -57,24 +56,17 @@ class MainActivity : ComponentActivity() {
             LingMouTheme {
                 val state by viewModel.state.collectAsStateWithLifecycle()
 
-                // 两个页面用状态位切换，没有引入 Navigation Compose
-                if (state.showKnowledgeBase) {
-                    KnowledgeScreen(
-                        state = state,
-                        onBack = viewModel::closeKnowledgeBase,
-                        onRefresh = viewModel::openKnowledgeBase,
-                        onDeleteNote = viewModel::deleteNote,
-                        onDeleteRecipe = viewModel::deleteRecipe
-                    )
-                } else {
-                    MainScreen(
-                        state = state,
-                        previewSlot = { AndroidCameraPreview(viewModel) },
-                        onSelectMode = viewModel::selectMode,
-                        onOpenKnowledgeBase = viewModel::openKnowledgeBase,
-                        onToggleCaption = viewModel::setCaptionEnabled
-                    )
-                }
+                // 底部双 Tab 外壳：模式 / 用户（导航状态在共享 UI 内部管理）
+                AppShell(
+                    state = state,
+                    previewSlot = { AndroidCameraPreview(viewModel) },
+                    onSelectMode = viewModel::selectMode,
+                    onToggleCaption = viewModel::setCaptionEnabled,
+                    onRefreshKnowledge = viewModel::refreshKnowledge,
+                    onRequestRuntimePermissions = { requestRuntimePermissions() },
+                    onOpenNotificationAccess = { jumpToNotificationAccess() },
+                    onOpenExactAlarmSettings = { jumpToExactAlarm() }
+                )
             }
         }
 

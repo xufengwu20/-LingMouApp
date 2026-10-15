@@ -30,6 +30,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refreshPermissions() = LingMouEngine.refreshPermissions()
 
+    /** 刷新笔记 / 菜谱列表（进入「用户」Tab 时由共享 UI 调用） */
+    fun refreshKnowledge() = LingMouEngine.refreshKnowledge()
+
     /** 让界面把「跳转系统设置」这类动作也记进应用内日志 */
     fun log(message: String) = LingMouEngine.log(message)
 

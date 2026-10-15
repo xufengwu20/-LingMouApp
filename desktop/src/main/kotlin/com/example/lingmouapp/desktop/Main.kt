@@ -8,8 +8,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import com.example.lingmouapp.ui.KnowledgeScreen
-import com.example.lingmouapp.ui.MainScreen
+import com.example.lingmouapp.ui.AppShell
 import com.example.lingmouapp.ui.theme.LingMouTheme
 import java.io.File
 
@@ -124,24 +123,17 @@ fun main() {
                     println("$PROBE PROBE_DONE")
                 }
 
-                if (state.showKnowledgeBase) {
-                    KnowledgeScreen(
-                        state = state,
-                        onBack = { DesktopEngine.setShowKnowledgeBase(false) },
-                        onRefresh = { DesktopEngine.refreshKnowledge() },
-                        onDeleteNote = { DesktopEngine.deleteNote(it) },
-                        onDeleteRecipe = { DesktopEngine.deleteRecipe(it) }
-                    )
-                } else {
-                    MainScreen(
-                        state = state,
-                        // 桌面端没有人脸检测 → 相机区域自动显示「当前平台暂不支持人脸检测」
-                        previewSlot = null,
-                        onSelectMode = { DesktopEngine.setMode(it) },
-                        onOpenKnowledgeBase = { DesktopEngine.setShowKnowledgeBase(true) },
-                        onToggleCaption = { DesktopEngine.setCaptionEnabled(it) }
-                    )
-                }
+                AppShell(
+                    state = state,
+                    // 桌面端没有人脸检测 → 相机区域自动显示「当前平台暂不支持人脸检测」
+                    previewSlot = null,
+                    onSelectMode = { DesktopEngine.setMode(it) },
+                    onToggleCaption = { DesktopEngine.setCaptionEnabled(it) },
+                    onRefreshKnowledge = { DesktopEngine.refreshKnowledge() },
+                    onRequestRuntimePermissions = { DesktopEngine.notSupported("运行时权限（桌面端不需要）") },
+                    onOpenNotificationAccess = { DesktopEngine.notSupported("通知使用权设置") },
+                    onOpenExactAlarmSettings = { DesktopEngine.notSupported("精确闹钟设置") }
+                )
             }
         }
     }
