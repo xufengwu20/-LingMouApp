@@ -1,6 +1,7 @@
 package com.example.lingmouapp.service.asr
 
 import com.example.lingmouapp.service.AIService
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -69,6 +70,12 @@ class SiliconFlowAsrEngine(
                         if (text.isNotBlank()) onText(text)
                     },
                     onFailure = { error ->
+                        // 主动取消（stop / 更换引擎）不是识别失败：静默退出，
+                        // 绝不能把「StandaloneCoroutine was cancelled」报成失败，
+                        // 更不能用它去累积连续失败、误触发降级。
+                        if (error is CancellationException || !isActive || !isListening) {
+                            return@fold
+                        }
                         consecutiveFailures++
                         val detail = error.message ?: error.javaClass.simpleName
                         onError(

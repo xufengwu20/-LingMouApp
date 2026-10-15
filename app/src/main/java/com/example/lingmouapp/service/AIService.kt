@@ -4,6 +4,7 @@ import com.example.lingmouapp.BuildConfig
 import com.example.lingmouapp.shared.RecipeDraft
 import com.example.lingmouapp.shared.RecipeStepDraft
 import com.example.lingmouapp.shared.VideoSummary
+import android.util.Log
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.okhttp.OkHttp
@@ -19,6 +20,7 @@ import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -102,12 +104,21 @@ class AIService(
             }
 
             if (response.status.value !in 200..299) {
+                Log.i(TAG, "transcribe HTTP ${response.status.value} model=$model size=${wav.size}B")
                 Result.failure(IllegalStateException("HTTP ${response.status.value}"))
             } else {
-                Result.success(response.body<TranscriptionResponse>().text.trim())
+                val text = response.body<TranscriptionResponse>().text.trim()
+                Log.i(TAG, "transcribe OK len=${text.length}")
+                Result.success(text)
             }
+        } catch (e: CancellationException) {
+            // 协程被主动取消（停止识别 / 更换引擎）是**正常生命周期**，不是失败。
+            // 绝不能把它转成 Result.failure —— 否则上层会误报「云端识别失败(1/3)」，
+            // 连续三次还会误触发降级，把好好的云端识别弄残。
+            throw e
         } catch (e: Exception) {
             // 网络超时、DNS 失败、TLS 失败、JSON 解析失败…… 全部收敛到这里
+            Log.w(TAG, "transcribe 失败：${e.javaClass.simpleName} ${e.message}")
             Result.failure(e)
         }
     }
@@ -230,6 +241,9 @@ class AIService(
     companion object {
         private const val DEFAULT_TIMEOUT_MS = 30_000L
         private const val CONNECT_TIMEOUT_MS = 10_000L
+
+        /** logcat 过滤：adb logcat -s LingMouAsr */
+        const val TAG = "LingMouAsr"
 
         /** 文字稿太长会拖慢响应也更容易超时，截断到合理长度 */
         private const val MAX_TRANSCRIPT_CHARS = 8_000

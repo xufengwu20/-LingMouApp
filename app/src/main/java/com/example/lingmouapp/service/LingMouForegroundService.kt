@@ -325,7 +325,15 @@ class LingMouForegroundService : LifecycleService() {
         }
 
         if (mode == AppMode.FOCUS) {
-            gazeTracker?.onFrame(frame.faceCount > 0 && frame.attentive)
+            val tracker = gazeTracker
+            if (tracker != null) {
+                val hasFace = frame.faceCount > 0
+                // 第一次检测到人脸时写一条日志：确认「视线离开自动暂停」已经就绪
+                if (hasFace && !tracker.isArmed()) {
+                    LingMouEngine.log("检测到人脸 → 视线离开自动暂停已就绪（离开 ${AWAY_THRESHOLD_MS / 1000} 秒触发）")
+                }
+                tracker.onFrame(hasFace = hasFace, attentiveNow = frame.attentive)
+            }
 
             if (frame.faceCount >= 2) {
                 val now = SystemClock.elapsedRealtime()

@@ -28,9 +28,21 @@ class GazeTracker(
     @Volatile
     private var armed: Boolean = false
 
-    fun onFrame(attentiveNow: Boolean) {
+    /**
+     * 每一帧人脸检测结果。
+     *
+     * @param hasFace 是否检测到人脸
+     * @param attentiveNow 是否「正在注视」（按头部角度/睁眼判定）
+     *
+     * arm 条件从「必须注视过一次」改为「检测到过人脸」：
+     * 之前的判定要求 |yaw|≤20° ∧ |pitch|≤20° ∧ 睁眼概率≥0.35，
+     * 手机拿得稍斜或 ML Kit 欧拉角有噪声时就永远无法 arm，
+     * 结果「人脸离开画面 3 秒」永远不会触发暂停 —— 这正是真机上观察到的现象。
+     * 「检测到人脸」这个条件宽松得多，先保证功能能触发。
+     */
+    fun onFrame(hasFace: Boolean, attentiveNow: Boolean) {
         attentive = attentiveNow
-        if (attentiveNow) armed = true
+        if (hasFace) armed = true
     }
 
     /** @return 已经离开屏幕的毫秒数；正在注视时返回 0 */
@@ -63,6 +75,7 @@ class GazeTracker(
         return if (attentive || since == 0L) 0L else SystemClock.elapsedRealtime() - since
     }
 
+    /** 是否已见过人脸（= 视线离开自动暂停是否可能触发） */
     fun isArmed(): Boolean = armed
 
     fun reset() {

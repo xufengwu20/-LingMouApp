@@ -42,6 +42,8 @@ fun StatusPanel(state: AppUiState) {
         when (state.mode) {
             AppMode.FOCUS -> {
                 if (caps.faceDetection) {
+                    // 调试信息：用于确认 ML Kit 人脸检测是否真的在工作（真机排查用）
+                    InfoRow("当前检测到的人脸数", "${state.faceCount} 张")
                     InfoRow("摄像头", state.cameraState)
                     if (state.engineRunning) {
                         InfoRow("视线状态", state.attention.label)

@@ -3,6 +3,7 @@ package com.example.lingmouapp.service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 
 /**
  * 定时提醒到点时由 AlarmManager 触发：发通知 + 更新界面状态。
@@ -18,12 +19,14 @@ class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != ACTION_FIRE) return
 
+        val id = intent.getIntExtra(EXTRA_ID, -1)
+        val label = intent.getStringExtra(EXTRA_LABEL).orEmpty().ifBlank { "定时提醒" }
+        // 关键验证日志：闹钟到点后这里一定会打出来（adb logcat -s LingMouReminder）
+        Log.i(TAG, "广播已收到 id=$id label=$label 时间=${System.currentTimeMillis()}")
+
         val app = context.applicationContext
         LingMouEngine.init(app)
         NotificationHelper(app).ensureChannels()
-
-        val id = intent.getIntExtra(EXTRA_ID, -1)
-        val label = intent.getStringExtra(EXTRA_LABEL).orEmpty().ifBlank { "定时提醒" }
 
         NotificationHelper(app).notifyReminder(label)
         LingMouEngine.onReminderFired(id, label)
@@ -33,5 +36,6 @@ class ReminderReceiver : BroadcastReceiver() {
         const val ACTION_FIRE = "com.example.lingmouapp.action.REMINDER_FIRE"
         const val EXTRA_ID = "extra_reminder_id"
         const val EXTRA_LABEL = "extra_reminder_label"
+        const val TAG = "LingMouReminder"
     }
 }

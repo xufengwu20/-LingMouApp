@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.util.Log
 import com.example.lingmouapp.model.Reminder
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -14,6 +15,11 @@ import java.util.concurrent.atomic.AtomicInteger
  * 这符合「先跑通逻辑、暂不涉及数据库」的当前目标。
  */
 class ReminderScheduler(private val context: Context) {
+
+    /** logcat 过滤：adb logcat -s LingMouReminder */
+    companion object {
+        const val TAG = "LingMouReminder"
+    }
 
     private val alarmManager: AlarmManager? =
         context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager
@@ -53,6 +59,14 @@ class ReminderScheduler(private val context: Context) {
                 // 没有精确闹钟权限时退化为非精确闹钟，功能不至于失效
                 am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
             }
+            // 关键验证日志：adb logcat -s LingMouReminder
+            Log.i(
+                TAG,
+                "已排定提醒 id=$id label=$label triggerAt=$triggerAt(${java.text.SimpleDateFormat("HH:mm:ss").format(java.util.Date(triggerAt))})" +
+                    " exact=$exact 当前时间=${System.currentTimeMillis()}"
+            )
+        } else {
+            Log.w(TAG, "AlarmManager 不可用，提醒无法排定：id=$id label=$label")
         }
 
         return Reminder(

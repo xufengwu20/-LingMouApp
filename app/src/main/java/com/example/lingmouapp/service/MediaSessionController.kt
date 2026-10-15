@@ -7,6 +7,7 @@ import android.media.session.MediaSessionManager
 import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import com.example.lingmouapp.model.MediaSessionSnapshot
 
@@ -202,35 +203,69 @@ class MediaSessionController(private val context: Context) {
 
     // ------------------------------------------------------------------ 指令
 
+    /**
+     * 下发前把「拿到了哪些会话、目标是哪个包」写进 logcat（LingMouMedia），
+     * 同时把每个控制动作的结果也写进去 —— 真机上「点了没反应」时，
+     * 直接看 logcat 就能区分：没拿到会话 / 目标选错 / pause 调用被 App 忽略。
+     */
+    private fun describeForLog(): String {
+        val result = query()
+        val list = result.controllers
+            .filter { it.packageName != context.packageName }
+            .joinToString("；") { "${it.packageName ?: "?"}=${stateName(it.playbackState?.state)}" }
+        return "会话列表(${list.length})：$list ｜ queryError=${result.error ?: "无"} ｜ 通知使用权=${hasNotificationAccess()}"
+    }
+
     fun pause(): Boolean {
-        val c = primaryController() ?: return false
+        val c = primaryController()
+        if (c == null) {
+            Log.w(TAG, "pause：没有可用会话 —— ${describeForLog()}")
+            return false
+        }
+        val pkg = c.packageName
         return try {
             c.transportControls.pause()
+            Log.i(TAG, "已向 $pkg 下发 pause（state=${stateName(c.playbackState?.state)}）")
             true
         } catch (e: Exception) {
+            Log.w(TAG, "向 $pkg 下发 pause 失败：${e.javaClass.simpleName} ${e.message}")
             false
         }
     }
 
     fun play(): Boolean {
-        val c = primaryController() ?: return false
+        val c = primaryController()
+        if (c == null) {
+            Log.w(TAG, "play：没有可用会话 —— ${describeForLog()}")
+            return false
+        }
+        val pkg = c.packageName
         return try {
             c.transportControls.play()
+            Log.i(TAG, "已向 $pkg 下发 play（state=${stateName(c.playbackState?.state)}）")
             true
         } catch (e: Exception) {
+            Log.w(TAG, "向 $pkg 下发 play 失败：${e.javaClass.simpleName} ${e.message}")
             false
         }
     }
 
     /** 回退：用 seekTo(当前位置 - seconds) 实现，比 ACTION_REWIND 兼容性好得多 */
     fun rewind(seconds: Int): Boolean {
-        val c = primaryController() ?: return false
+        val c = primaryController()
+        if (c == null) {
+            Log.w(TAG, "rewind：没有可用会话 —— ${describeForLog()}")
+            return false
+        }
+        val pkg = c.packageName
         return try {
             val position = c.playbackState?.position ?: 0L
             val target = (position - seconds * 1000L).coerceAtLeast(0L)
             c.transportControls.seekTo(target)
+            Log.i(TAG, "已向 $pkg 下发 seekTo($target)（原位置 $position）")
             true
         } catch (e: Exception) {
+            Log.w(TAG, "向 $pkg 下发 seekTo 失败：${e.javaClass.simpleName} ${e.message}")
             false
         }
     }
@@ -252,6 +287,9 @@ class MediaSessionController(private val context: Context) {
     }
 
     companion object {
+        /** logcat 过滤：adb logcat -s LingMouMedia */
+        const val TAG = "LingMouMedia"
+
         /** 这些包名可能是「媒体控制中心」之类的壳会话，不是真正在放视频的 App */
         private val SYSTEM_PACKAGES = setOf("android", "com.android.systemui")
     }

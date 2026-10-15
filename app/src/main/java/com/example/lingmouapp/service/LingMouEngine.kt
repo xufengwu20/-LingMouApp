@@ -12,6 +12,7 @@ import com.example.lingmouapp.model.AppUiState
 import com.example.lingmouapp.model.AttentionState
 import com.example.lingmouapp.model.MediaAction
 import com.example.lingmouapp.model.PlayerState
+import android.util.Log
 import com.example.lingmouapp.service.asr.AsrEngine
 import com.example.lingmouapp.service.asr.SiliconFlowAsrEngine
 import com.example.lingmouapp.service.asr.SystemAsrEngine
@@ -42,6 +43,9 @@ import java.time.format.DateTimeFormatter
  * 引入 Hilt/Koin 只会增加编译与调试成本。
  */
 object LingMouEngine {
+
+    /** logcat 过滤：adb logcat -s LingMouEngine */
+    const val TAG = "LingMouEngine"
 
     private const val MAX_LOG_LINES = 150
     private const val PLAYER_TICK_MS = 500L
@@ -283,6 +287,14 @@ object LingMouEngine {
      *   3. 写一条日志，说明到底有没有真的下发出去
      */
     fun performMediaAction(action: MediaAction, reason: String, seconds: Int = 0) {
+        // 先把「当前能拿到哪些会话、目标包名」写进 logcat 与应用日志：
+        // 真机上「点了没反应」时直接看这行，就能区分是没会话/选错目标/调用被忽略。
+        val snapshot = mediaSession?.snapshot()
+        val sessionDetail = snapshot?.detail ?: "无"
+        val targetPackage = snapshot?.targetPackage ?: "无"
+        Log.i(TAG, "[媒体] 会话列表：$sessionDetail ｜ 目标包名：$targetPackage ｜ 动作：${action.label}（$reason）")
+        log("[媒体] 会话列表：$sessionDetail；目标：$targetPackage")
+
         val delivered = when (action) {
             MediaAction.PAUSE -> mediaSession?.pause() ?: false
             MediaAction.PLAY -> mediaSession?.play() ?: false
@@ -371,8 +383,6 @@ object LingMouEngine {
      */
     @Synchronized
     fun startAsr(preferCloud: Boolean, source: String) {
-        releaseAsr()
-
         val ctx = appContext ?: return
 
         if (!hasAudioPermission(ctx)) {
@@ -391,6 +401,24 @@ object LingMouEngine {
         val state = _state.value
         val wantCloud = preferCloud && !cloudAsrSuspended
         val cloudUsable = wantCloud && state.siliconFlowKeyConfigured
+
+        // ---- 幂等保护（修复「云端识别失败(1/3): StandaloneCoroutine was cancelled」）----
+        // 原来这里无条件 releaseAsr() 再重建：重复触发（再次点烹饪模式按钮、
+        // 前台服务 onStartCommand 重入、降级回调）会把**正在请求中的**云端识别取消，
+        // CancellationException 被当成失败上报，连发三次还误触发降级。
+        // 同一后端已经在跑时直接返回，什么都不动。
+        val existing = asr
+        val sameBackend = when {
+            existing == null -> false
+            cloudUsable -> existing is SiliconFlowAsrEngine
+            else -> existing is SystemAsrEngine
+        }
+        if (sameBackend && existing != null && existing.isListening) {
+            log("[$source] 语音识别已在运行（${existing.displayName}），跳过重复启动")
+            return
+        }
+
+        releaseAsr()
 
         if (wantCloud && !state.siliconFlowKeyConfigured) {
             update {
