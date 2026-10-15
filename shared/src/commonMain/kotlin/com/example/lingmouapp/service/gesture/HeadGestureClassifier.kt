@@ -17,8 +17,10 @@ package com.example.lingmouapp.service.gesture
  * ── 三重防误触 ─────────────────────────────────────────────
  *  1. 必须**越过阈值**才算极值（点头 ±12°，摇头 ±15°），轻微晃动直接忽略；
  *  2. 相邻两个极值的间隔必须 ≥ 250ms，滤掉单帧抖动造成的假翻转；
- *  3. 两个极值必须落在 1400ms 窗口内，且**两种动作共享 1800ms 冷却**，
+ *  3. 两个极值必须落在 1400ms 窗口内，且**两种动作共享 1000ms 冷却**，
  *     避免一次大幅度的斜向摆头同时判成点头 + 摇头。
+ *     （从 1800ms 调低到 1000ms：1800ms 让连续指令明显迟钝，
+ *       1000ms 已足够防止单次摆头被重复判定。）
  */
 class HeadGestureClassifier(
     private val nodThresholdDeg: Float = DEFAULT_NOD_THRESHOLD_DEG,
@@ -99,7 +101,7 @@ class HeadGestureClassifier(
         const val DEFAULT_SHAKE_THRESHOLD_DEG = 15f
         const val DEFAULT_WINDOW_MS = 1_400L
         const val DEFAULT_MIN_EXTREME_GAP_MS = 250L
-        const val DEFAULT_COOLDOWN_MS = 1_800L
+        const val DEFAULT_COOLDOWN_MS = 1_000L
         const val REQUIRED_EXTREMES = 2
     }
 }

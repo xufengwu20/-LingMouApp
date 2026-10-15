@@ -75,7 +75,7 @@ class HeadGestureClassifierTest {
         val c = classifier()
         assertEquals("none", c.detectHeadGesture(-20f, 0f, 300))
         assertEquals("nod", c.detectHeadGesture(20f, 0f, 700))
-        // 距上次动作只有 200ms / 600ms，还在 1800ms 冷却里
+        // 距上次动作只有 200ms / 600ms，还在 1000ms 冷却里
         assertEquals("none", c.detectHeadGesture(-20f, 0f, 900))
         assertEquals("none", c.detectHeadGesture(20f, 0f, 1300))
     }

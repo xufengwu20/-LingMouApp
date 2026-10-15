@@ -50,6 +50,9 @@ object LingMouEngine {
     private const val MAX_LOG_LINES = 150
     private const val PLAYER_TICK_MS = 500L
 
+    /** 相机帧 → 界面状态的最小更新间隔（100ms = 每秒最多 10 次 UI 刷新） */
+    private const val FACE_UI_UPDATE_INTERVAL_MS = 100L
+
     /** 指令来源标记，只用于日志区分 */
     private const val SOURCE_MANUAL = "手动模拟"
     private const val SOURCE_SPEECH = "语音识别"
@@ -182,6 +185,11 @@ object LingMouEngine {
         _preview.value = preview
     }
 
+    /** 相机帧 UI 刷新节流：检测每帧都来（20-30fps），每帧都发 StateFlow
+     *  会让整个界面每秒重组二三十次，拖慢主线程与后续控制链路。
+     *  这里节流到 100ms 一次；视线/头部判定在服务侧每帧进行，不受影响。 */
+    private var lastFaceUiUpdateAt = 0L
+
     fun onFaceFrame(
         faceCount: Int,
         attentive: Boolean,
@@ -189,6 +197,9 @@ object LingMouEngine {
         yaw: Float,
         roll: Float = 0f
     ) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastFaceUiUpdateAt < FACE_UI_UPDATE_INTERVAL_MS) return
+        lastFaceUiUpdateAt = now
         update {
             it.copy(
                 faceCount = faceCount,
