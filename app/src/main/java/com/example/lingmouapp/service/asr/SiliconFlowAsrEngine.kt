@@ -38,7 +38,11 @@ class SiliconFlowAsrEngine(
     override var isListening: Boolean = false
         private set
 
-    override fun start(onText: (String) -> Unit, onError: (String) -> Unit) {
+    override fun start(
+        onText: (String) -> Unit,
+        onError: (String) -> Unit,
+        onPartial: ((String) -> Unit)?
+    ) {
         if (isListening) return
 
         if (!aiService.isConfigured) {

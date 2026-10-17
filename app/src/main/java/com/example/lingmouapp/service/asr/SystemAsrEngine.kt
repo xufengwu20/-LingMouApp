@@ -73,7 +73,11 @@ class SystemAsrEngine(private val context: Context) : AsrEngine {
         }
     }
 
-    override fun start(onText: (String) -> Unit, onError: (String) -> Unit) {
+    override fun start(
+        onText: (String) -> Unit,
+        onError: (String) -> Unit,
+        onPartial: ((String) -> Unit)?
+    ) {
         onTextCallback = onText
         onErrorCallback = onError
 

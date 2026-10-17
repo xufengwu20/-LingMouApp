@@ -62,3 +62,6 @@ signing.properties
 .DS_Store
 Thumbs.db
 *.log
+
+# Vosk 离线识别模型（约 45MB，用 tools/download-vosk-model.py 下载）
+app/src/main/assets/models/

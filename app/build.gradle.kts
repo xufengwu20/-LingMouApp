@@ -158,6 +158,12 @@ dependencies {
 
     implementation(libs.mlkit.face.detection)
 
+    // 本地离线语音识别（Vosk）。
+    // 注意：vosk-android 是 Android AAR（内含各 ABI 的 libvosk.so），不是 KMP 构件，
+    // 所以放在 :app 而不是 :shared —— 顺带绕开 KMP 共享模块加载原生库的问题。
+    // 模型在 app/src/main/assets/models/（约 45MB，gitignore，用 tools/download-vosk-model.py 下载）。
+    implementation("com.alphacephei:vosk-android:0.3.47")
+
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.client.core)

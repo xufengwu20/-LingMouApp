@@ -16,6 +16,7 @@ import android.util.Log
 import com.example.lingmouapp.service.asr.AsrEngine
 import com.example.lingmouapp.service.asr.SiliconFlowAsrEngine
 import com.example.lingmouapp.service.asr.SystemAsrEngine
+import com.example.lingmouapp.service.asr.VoskSpeechService
 import com.example.lingmouapp.service.nlp.LocalCommandRouter
 import com.example.lingmouapp.service.nlp.TimeExpressionParser
 import kotlinx.coroutines.CoroutineScope
@@ -106,7 +107,8 @@ object LingMouEngine {
         _state.update {
             it.copy(
                 siliconFlowKeyConfigured = keyConfigured,
-                preferCloudAsr = keyConfigured,
+                // 默认本地离线识别（Vosk）；云端仅作为可选的高精度模式
+                preferCloudAsr = false,
                 asrModel = BuildConfig.SILICONFLOW_ASR_MODEL,
                 asrModelIsDefault = modelIsDefault
             )
@@ -114,9 +116,11 @@ object LingMouEngine {
 
         startPlayerTicker()
         refreshPermissions()
+        val voskReady = VoskSpeechService.modelReady(ctx)
         log(
-            "引擎初始化完成（云端 ASR Key：${if (keyConfigured) "已配置" else "未配置"}，" +
-                "模型 ${BuildConfig.SILICONFLOW_ASR_MODEL}${if (modelIsDefault) " 默认值" else ""}）"
+            "引擎初始化完成（默认本地离线识别 Vosk：" +
+                if (voskReady) "模型已就绪" else "模型未解包，将回退系统内置识别" +
+                "；云端 Key：${if (keyConfigured) "已配置（可选高精度模式）" else "未配置"}）"
         )
     }
 
@@ -415,14 +419,14 @@ object LingMouEngine {
 
         // ---- 幂等保护（修复「云端识别失败(1/3): StandaloneCoroutine was cancelled」）----
         // 原来这里无条件 releaseAsr() 再重建：重复触发（再次点烹饪模式按钮、
-        // 前台服务 onStartCommand 重入、降级回调）会把**正在请求中的**云端识别取消，
+        // 前台服务 onStartCommand 重入、降级回调）会把**正在请求中的**识别取消，
         // CancellationException 被当成失败上报，连发三次还误触发降级。
         // 同一后端已经在跑时直接返回，什么都不动。
         val existing = asr
         val sameBackend = when {
             existing == null -> false
             cloudUsable -> existing is SiliconFlowAsrEngine
-            else -> existing is SystemAsrEngine
+            else -> existing is VoskSpeechService || existing is SystemAsrEngine
         }
         if (sameBackend && existing != null && existing.isListening) {
             log("[$source] 语音识别已在运行（${existing.displayName}），跳过重复启动")
@@ -435,17 +439,21 @@ object LingMouEngine {
             update {
                 it.copy(
                     asrDegraded = true,
-                    asrNote = "未配置 SILICONFLOW_API_KEY → 已自动降级为系统内置识别"
+                    asrNote = "未配置 SILICONFLOW_API_KEY → 已改用本地离线识别（Vosk）"
                 )
             }
-            log("[$source] 云端 ASR 不可用（未配置 SILICONFLOW_API_KEY）→ 自动降级为系统内置识别")
+            log("[$source] 云端 ASR 不可用（未配置 SILICONFLOW_API_KEY）→ 使用本地离线识别（Vosk）")
         } else if (preferCloud && cloudAsrSuspended) {
-            log("[$source] 云端 ASR 本次会话已因连续失败被挂起 → 继续使用系统内置识别")
+            log("[$source] 云端 ASR 本次会话已因连续失败被挂起 → 继续使用本地离线识别（Vosk）")
         }
 
+        // 后端选择：云端（高精度，可选）→ Vosk 本地离线（默认）→ 系统内置（兜底）
         val engine: AsrEngine = if (cloudUsable) {
             SiliconFlowAsrEngine(onDegrade = { reason -> onCloudAsrDegraded(reason) })
+        } else if (VoskSpeechService.modelReady(ctx)) {
+            VoskSpeechService(ctx)
         } else {
+            log("[$source] Vosk 本地模型未就绪（assets 缺失或未解包）→ 退回系统内置识别")
             SystemAsrEngine(ctx)
         }
 
@@ -465,6 +473,11 @@ object LingMouEngine {
                 onError = { message ->
                     log("[$source] 语音识别：$message")
                     update { it.copy(asrNote = message) }
+                },
+                // 部分结果只刷新「最近识别」显示（说完→出字延迟降到读缓冲周期级），
+                // 不喂给指令解析 —— 半句话不该触发控制动作。
+                onPartial = { partial ->
+                    update { it.copy(lastTranscript = partial) }
                 }
             )
         } catch (e: Exception) {
@@ -504,7 +517,7 @@ object LingMouEngine {
         scope.launch {
             cloudAsrSuspended = true
             update { it.copy(asrDegraded = true, asrNote = reason) }
-            log("云端 ASR 降级：$reason")
+            log("云端 ASR 降级：$reason → 改用本地离线识别（Vosk）")
             startAsr(preferCloud = false, source = "自动降级")
         }
     }
