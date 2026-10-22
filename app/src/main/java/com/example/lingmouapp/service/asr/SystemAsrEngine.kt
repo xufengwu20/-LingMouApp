@@ -95,8 +95,16 @@ class SystemAsrEngine(private val context: Context) : AsrEngine {
 
     private fun ensureRecognizer() {
         if (recognizer == null) {
-            recognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
-                setRecognitionListener(listener)
+            try {
+                recognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+                    setRecognitionListener(listener)
+                }
+            } catch (t: Throwable) {
+                // 防御：系统语音服务缺失/损坏时 createSpeechRecognizer 可能抛异常，
+                // 绝不能让 App 崩溃 —— 复位标志并上报，由上层决定下一步。
+                Log.w(TAG, "创建 SpeechRecognizer 失败：${t.javaClass.simpleName} ${t.message}")
+                isListening = false
+                onErrorCallback?.invoke("系统语音识别初始化失败：${t.javaClass.simpleName} ${t.message ?: ""}")
             }
         }
     }

@@ -2,6 +2,7 @@ package com.example.lingmouapp.service.asr
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.res.AssetManager
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -9,9 +10,7 @@ import android.util.Log
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
-import org.vosk.android.StorageService
 import java.io.File
-import java.io.IOException
 import java.util.concurrent.Executors
 
 /**
@@ -23,7 +22,9 @@ import java.util.concurrent.Executors
  *   - 放在 :app 完全绕开「KMP 共享模块加载原生库」这一整类问题。
  *
  * 流程：
- *   1. 首次启动时把 assets/models/ 里的中文小模型解包到内部存储（StorageService.unpack，一次性）；
+ *   1. 首次启动时把 assets/models/ 里的中文小模型**自行解包**到内部存储（一次性）。
+ *      特意不用 vosk 的 StorageService：它的回调跑在它自己起的线程里，
+ *      回调一旦抛异常会直接崩掉整个进程；自己实现解包，全程可控、可 try-catch；
  *   2. AudioRecord 采集 16kHz / 单声道 / PCM16；
  *   3. 单线程循环 `acceptWaveForm(buffer, len)`；
  *   4. 每句话的最终结果（recognizer.result 的 JSON `text`）回调 [AsrEngine] 的 onText，
@@ -31,7 +32,8 @@ import java.util.concurrent.Executors
  *      「最近识别」用 partial 实时刷新（说完到显示 ≈ 一个读缓冲周期，百毫秒级），
  *      指令解析只消费 final，避免半句话触发控制动作。
  *
- * 注意：`start()` 内部的异常全部收敛成 onError，不向外抛；
+ * 注意：`start()` 内部的异常**包括 Error（如原生库加载失败的 UnsatisfiedLinkError）**
+ * 全部收敛成 onError，绝不外抛、绝不让 App 崩溃；
  * stop/release 幂等，资源在识别线程的 finally 里释放。
  */
 class VoskSpeechService(
@@ -75,7 +77,14 @@ class VoskSpeechService(
         onPartialCallback = onPartial
         if (isListening) return
         isListening = true
-        executor.execute { runLoop() }
+        try {
+            executor.execute { runLoop() }
+        } catch (t: Throwable) {
+            // 线程池拒绝执行等极端情况也不允许外抛
+            Log.w(TAG, "启动识别线程失败：${t.javaClass.simpleName} ${t.message}")
+            isListening = false
+            onErrorCallback?.invoke("本地识别启动失败：${t.javaClass.simpleName}")
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -117,14 +126,16 @@ class VoskSpeechService(
                 }
                 rec.partialResult?.let { emitPartial(it) }
             }
-        } catch (e: Exception) {
-            Log.w(TAG, "识别循环异常：${e.javaClass.simpleName} ${e.message}")
+        } catch (t: Throwable) {
+            // 防御：连 UnsatisfiedLinkError（原生库加载失败）、OutOfMemoryError 这类
+            // Error 也要收敛 —— 模型/原生库出任何问题都不能让 App 崩溃，只静默降级。
+            Log.w(TAG, "识别循环异常：${t.javaClass.simpleName} ${t.message}")
             // 关键：异常退出**必须**复位 isListening —— 否则引擎侧的幂等守卫会认为
             // 「仍在监听」，永远挡掉重启，语音彻底失声（这是「完全没有反应」的根因之一）。
             val wasListening = isListening
             isListening = false
             if (wasListening) {
-                onErrorCallback?.invoke("本地识别异常：${e.javaClass.simpleName} ${e.message ?: ""}")
+                onErrorCallback?.invoke("本地识别异常：${t.javaClass.simpleName} ${t.message ?: ""}")
             }
         } finally {
             stopInternal()
@@ -174,22 +185,46 @@ class VoskSpeechService(
 
     // ------------------------------------------------------------------ 资源
 
-    /** 从 assets 解包模型（一次性，约几十 MB）并创建 Recognizer */
+    /**
+     * 自行把 assets 里的模型解包到内部存储（一次性，约几十 MB）并创建 Recognizer。
+     *
+     * 全部步骤都在 try/catch 内：解包失败、Model/Recognizer 构造失败、
+     * 原生库加载失败（UnsatisfiedLinkError）一律包装成 IllegalStateException 抛出，
+     * 由 runLoop 的 catch(Throwable) 收敛 → onError → 上层静默降级到系统识别。
+     * 绝不向上抛 Error、绝不让进程崩。
+     */
     private fun ensureModel() {
         if (model != null) return
-        StorageService.unpack(
-            context,
-            assetModelPath,
-            UNPACKED_NAME,
-            { unpacked ->
-                model = unpacked
-                recognizer = Recognizer(unpacked, sampleRate)
-                Log.i(TAG, "模型加载完成（$UNPACKED_NAME）")
-            },
-            { e: IOException ->
-                throw IllegalStateException("模型解包失败：${e.message}")
+        try {
+            val targetDir = File(context.filesDir, UNPACKED_NAME)
+            if (!targetDir.isDirectory || !File(targetDir, "am").isDirectory) {
+                copyAssetsDir(context.assets, assetModelPath, targetDir)
             }
-        )
+            model = Model(targetDir.absolutePath)
+            recognizer = Recognizer(model!!, sampleRate)
+            Log.i(TAG, "模型加载完成（$UNPACKED_NAME）")
+        } catch (t: Throwable) {
+            throw IllegalStateException("模型加载失败：${t.javaClass.simpleName} ${t.message ?: ""}")
+        }
+    }
+
+    /** 递归复制 assets 目录（文件 + 子目录）到目标位置 */
+    private fun copyAssetsDir(assets: AssetManager, srcPath: String, destDir: File) {
+        val children = assets.list(srcPath) ?: return
+        if (children.isEmpty()) return
+        destDir.mkdirs()
+        for (child in children) {
+            val childPath = "$srcPath/$child"
+            val childDest = File(destDir, child)
+            val sub = assets.list(childPath)
+            if (sub != null && sub.isNotEmpty()) {
+                copyAssetsDir(assets, childPath, childDest)
+            } else {
+                assets.open(childPath).use { input ->
+                    childDest.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+        }
     }
 
     private fun stopInternal() {

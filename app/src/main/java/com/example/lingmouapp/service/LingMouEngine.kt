@@ -507,6 +507,9 @@ object LingMouEngine {
     @Synchronized
     private fun fallbackToSystemAsr(source: String) {
         val ctx = appContext ?: return
+        // 已在跑系统识别就不重复兜底（防止 onError 连锁触发死循环）
+        val current = asr
+        if (current is SystemAsrEngine && current.isListening) return
         releaseAsr()
         val fallback = SystemAsrEngine(ctx)
         asr = fallback

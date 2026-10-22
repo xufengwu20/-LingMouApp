@@ -161,6 +161,9 @@ class LingMouForegroundService : LifecycleService() {
                 gazeTracker = null
                 setupHeadGestures()
                 startCamera()
+                // 防御：进烹饪模式前先释放上一模式可能占用的麦克风（AudioRecord/SpeechRecognizer），
+                // 再启动本模式的识别，避免两个采集端互相抢占导致初始化失败或崩溃。
+                stopAsr()
                 startAsr()
             }
             AppMode.DO_NOT_DISTURB -> shutdown()
