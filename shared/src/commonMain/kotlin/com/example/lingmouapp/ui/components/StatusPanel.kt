@@ -59,7 +59,14 @@ fun StatusPanel(state: AppUiState) {
                     InfoRow("头部控制", if (state.headControlEnabled) "已启用" else "未启用")
                 }
                 if (caps.cloudAsr) {
-                    InfoRow("语音识别", if (state.asrRunning) "聆听中" else "未运行")
+                    // 显示实际后端名；未运行时直接露出失败原因（真机排查一眼可见）
+                    InfoRow(
+                        "语音识别",
+                        when {
+                            state.asrRunning -> state.asrBackend
+                            else -> state.asrNote.ifBlank { "未运行" }
+                        }
+                    )
                 }
             }
             AppMode.DO_NOT_DISTURB -> InfoRow("摄像头 / 麦克风", "均已释放")

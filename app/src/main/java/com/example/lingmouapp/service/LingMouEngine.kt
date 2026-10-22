@@ -452,14 +452,17 @@ object LingMouEngine {
             log("[$source] 云端 ASR 本次会话已因连续失败被挂起 → 继续使用本地离线识别（Vosk）")
         }
 
-        // 后端选择：云端（高精度，可选）→ Vosk 本地离线（默认）→ 系统内置（兜底）
+        // 后端选择：云端（高精度，可选）→ Vosk 本地离线（默认）→ 系统内置（Vosk 失败后兜底）
         val engine: AsrEngine = if (cloudUsable) {
             SiliconFlowAsrEngine(onDegrade = { reason -> onCloudAsrDegraded(reason) })
-        } else if (VoskSpeechService.modelReady(ctx)) {
-            VoskSpeechService(ctx)
         } else {
-            log("[$source] Vosk 本地模型未就绪（assets 缺失或未解包）→ 退回系统内置识别")
-            SystemAsrEngine(ctx)
+            // 修复鸡生蛋死锁：之前「模型未解包就退回系统识别」，而解包只发生在
+            // Vosk.start() 里 —— Vosk 永远没机会自解包。现在总是先选 Vosk，
+            // 它在首次启动时自行从 assets 解包；只有真初始化失败（onError）才兜底。
+            if (!VoskSpeechService.modelReady(ctx)) {
+                log("[$source] Vosk 模型尚未解包，首次启动时将从 assets 解包（一次性，约几十 MB）")
+            }
+            VoskSpeechService(ctx)
         }
 
         asr = engine
@@ -478,6 +481,11 @@ object LingMouEngine {
                 onError = { message ->
                     log("[$source] 语音识别：$message")
                     update { it.copy(asrNote = message) }
+                    // Vosk 初始化失败（模型解包失败等）→ 立即兜底切系统内置识别，
+                    // 保证「进入烹饪模式 → 麦克风链路持续工作」不因本地引擎失败而中断。
+                    if (engine is VoskSpeechService && !engine.isListening) {
+                        fallbackToSystemAsr(source)
+                    }
                 },
                 // 部分结果只刷新「最近识别」显示（说完→出字延迟降到读缓冲周期级），
                 // 不喂给指令解析 —— 半句话不该触发控制动作。
@@ -488,6 +496,33 @@ object LingMouEngine {
         } catch (e: Exception) {
             // 兜底：识别引擎自身出问题也不能让上层崩
             log("[$source] 语音识别启动异常：${e.javaClass.simpleName} ${e.message}")
+            update { it.copy(asrRunning = false, asrBackend = "启动失败", asrNote = "语音识别启动失败") }
+        }
+    }
+
+    /**
+     * 本地 Vosk 不可用时的兜底：直接换成系统内置识别并启动。
+     * 不经过上面的幂等守卫（那守卫是给「正常重复启动」用的，这里必须强制切换）。
+     */
+    @Synchronized
+    private fun fallbackToSystemAsr(source: String) {
+        val ctx = appContext ?: return
+        releaseAsr()
+        val fallback = SystemAsrEngine(ctx)
+        asr = fallback
+        update { it.copy(asrBackend = fallback.displayName) }
+        log("[$source] 本地 Vosk 不可用 → 已改用系统内置识别")
+        try {
+            fallback.start(
+                onText = { text -> onSpeechText(text) },
+                onError = { message ->
+                    log("[$source] 系统识别：$message")
+                    update { it.copy(asrNote = message) }
+                },
+                onPartial = null
+            )
+        } catch (e: Exception) {
+            log("[$source] 系统识别启动异常：${e.javaClass.simpleName} ${e.message}")
             update { it.copy(asrRunning = false, asrBackend = "启动失败", asrNote = "语音识别启动失败") }
         }
     }

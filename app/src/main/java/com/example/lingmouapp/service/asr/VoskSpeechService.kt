@@ -119,7 +119,11 @@ class VoskSpeechService(
             }
         } catch (e: Exception) {
             Log.w(TAG, "识别循环异常：${e.javaClass.simpleName} ${e.message}")
-            if (isListening) {
+            // 关键：异常退出**必须**复位 isListening —— 否则引擎侧的幂等守卫会认为
+            // 「仍在监听」，永远挡掉重启，语音彻底失声（这是「完全没有反应」的根因之一）。
+            val wasListening = isListening
+            isListening = false
+            if (wasListening) {
                 onErrorCallback?.invoke("本地识别异常：${e.javaClass.simpleName} ${e.message ?: ""}")
             }
         } finally {
@@ -189,6 +193,8 @@ class VoskSpeechService(
     }
 
     private fun stopInternal() {
+        // 无论什么原因走到这里，监听标志都必须复位（幂等，重复置 false 无害）
+        isListening = false
         // 停之前把残余音频的最终结果也吐出来，避免丢掉半句话
         val rec = recognizer
         try {
