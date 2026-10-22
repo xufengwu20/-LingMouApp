@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
+import com.example.lingmouapp.model.MediaAction
 import com.example.lingmouapp.model.MediaSessionSnapshot
 
 /**
@@ -104,26 +105,31 @@ class MediaSessionController(private val context: Context) {
      * 之所以是「排到最后」而不是「直接排除」：极端情况下它可能是唯一能拿到的会话，
      * 直接丢掉会让排查无从下手。
      */
-    private fun candidates(): List<MediaController> =
-        query().controllers
-            .filter { it.packageName != context.packageName }
+    private fun candidates(all: List<MediaController>): List<MediaController> =
+        all.filter { it.packageName != context.packageName }
             .sortedBy { if (SYSTEM_PACKAGES.contains(it.packageName)) 1 else 0 }
 
     /**
-     * 选一个「最可能正在放视频」的会话。
+     * 从**刚查回来的**会话列表里选一个「最可能正在放视频」的会话。
      *
      * 优先级：正在播放 > 处于可控制状态（暂停/缓冲/快进快退/停止） > 任意一个。
      * 最后那档是刻意保留的：不少国产 App 的 playbackState 上报不全
      * （B 站某些版本常常是 STATE_NONE），但 transportControls 依然有效，
      * 所以不能因为状态不标准就放弃它。
+     *
+     * 注意：本类**不缓存**任何 MediaController —— 每次调用都重新 getActiveSessions，
+     * 因为外部 App 的会话随时可能失效（切歌、退出、被系统回收）。
      */
-    private fun primaryController(): MediaController? {
-        val list = candidates()
+    private fun choosePrimary(all: List<MediaController>): MediaController? {
+        val list = candidates(all)
         if (list.isEmpty()) return null
         list.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }?.let { return it }
         list.firstOrNull { isTransportable(it.playbackState?.state) }?.let { return it }
         return list.first()
     }
+
+    /** 其他调用方（快照/探测）用：内部同样每次实时查询 */
+    private fun primaryController(): MediaController? = choosePrimary(query().controllers)
 
     private fun isTransportable(state: Int?): Boolean = when (state) {
         PlaybackState.STATE_PAUSED,
@@ -166,7 +172,7 @@ class MediaSessionController(private val context: Context) {
             )
         }
 
-        val list = candidates()
+        val list = candidates(result.controllers)
         if (list.isEmpty()) {
             return MediaSessionSnapshot(
                 summary = "没有可下发的媒体会话（先在 B 站 / 华为视频里播放一个视频，再回到这里刷新）",
@@ -175,7 +181,7 @@ class MediaSessionController(private val context: Context) {
             )
         }
 
-        val chosen = primaryController()
+        val chosen = choosePrimary(result.controllers)
         val pkg = chosen?.packageName
         val state = stateName(chosen?.playbackState?.state)
         return MediaSessionSnapshot(
@@ -242,62 +248,69 @@ class MediaSessionController(private val context: Context) {
         return "会话列表(${list.length})：$list ｜ queryError=${result.error ?: "无"} ｜ 通知使用权=${hasNotificationAccess()}"
     }
 
-    fun pause(): Boolean {
-        val c = primaryController()
-        if (c == null) {
-            Log.w(TAG, "pause：没有可用会话 —— ${describeForLog()}")
-            return false
-        }
-        val pkg = c.packageName
-        val beforeState = stateName(c.playbackState?.state)
-        return try {
-            c.transportControls.pause()
-            Log.i(TAG, "已向 $pkg 下发 pause（下发前 state=$beforeState）")
-            verifyAfterDispatch(pkg, "pause", beforeState, c.playbackState?.position)
-            true
-        } catch (e: Exception) {
-            Log.w(TAG, "向 $pkg 下发 pause 异常（未被吞掉，这里打印）：${e.javaClass.simpleName} ${e.message}")
-            false
-        }
-    }
+    fun pause(): Boolean = dispatch(MediaAction.PAUSE, 0)
 
-    fun play(): Boolean {
-        val c = primaryController()
-        if (c == null) {
-            Log.w(TAG, "play：没有可用会话 —— ${describeForLog()}")
-            return false
-        }
-        val pkg = c.packageName
-        val beforeState = stateName(c.playbackState?.state)
-        return try {
-            c.transportControls.play()
-            Log.i(TAG, "已向 $pkg 下发 play（下发前 state=$beforeState）")
-            verifyAfterDispatch(pkg, "play", beforeState, c.playbackState?.position)
-            true
-        } catch (e: Exception) {
-            Log.w(TAG, "向 $pkg 下发 play 异常（未被吞掉，这里打印）：${e.javaClass.simpleName} ${e.message}")
-            false
-        }
-    }
+    fun play(): Boolean = dispatch(MediaAction.PLAY, 0)
 
     /** 回退：用 seekTo(当前位置 - seconds) 实现，比 ACTION_REWIND 兼容性好得多 */
-    fun rewind(seconds: Int): Boolean {
-        val c = primaryController()
+    fun rewind(seconds: Int): Boolean = dispatch(MediaAction.REWIND, seconds)
+
+    /**
+     * 统一的下发流程 —— 刻意设计成「每次指令都全新获取，用完即弃」：
+     *
+     * 外部 App 的会话生命周期完全不受本应用控制，**旧 Controller 随时可能失效**，
+     * 所以绝对不能在初始化时拿一次然后全局复用。这里的每一步都是本次调用内新查的：
+     *   ① getActiveSessions 重新查（不缓存）
+     *   ② 重新选主会话（不缓存）
+     *   ③ transportControls 下发，try/catch 兜异常
+     *   ④ finally：丢弃引用 —— MediaController 没有 close API，本类也不注册
+     *      callback，所以「释放」= 不持有引用；同时本类**没有任何** isProcessing/
+     *      isPaused 之类的跨指令状态锁，不存在「锁忘了重置导致第二次指令被吞」的问题。
+     */
+    private fun dispatch(action: MediaAction, seconds: Int): Boolean {
+        // ① 每次指令都重新获取活跃会话
+        val result = query()
+        val controllers = result.controllers
+        Log.i(
+            TAG,
+            "执行 ${action.label} 前，getActiveSessions 返回 ${controllers.size} 个会话" +
+                "（通知使用权=${hasNotificationAccess()}，监听已连接=${MediaNotificationListener.connected}）"
+        )
+
+        // ② 重新选主会话
+        val c = choosePrimary(controllers)
         if (c == null) {
-            Log.w(TAG, "rewind：没有可用会话 —— ${describeForLog()}")
+            Log.w(TAG, "${action.label}：没有可用会话 —— ${describeForLog()}")
             return false
         }
         val pkg = c.packageName
-        val position = c.playbackState?.position ?: 0L
+        val beforeState = stateName(c.playbackState?.state)
+        val beforePosition = c.playbackState?.position
+
+        // ③④ 下发 + 无论成败都在 finally 丢引用
         return try {
-            val target = (position - seconds * 1000L).coerceAtLeast(0L)
-            c.transportControls.seekTo(target)
-            Log.i(TAG, "已向 $pkg 下发 seekTo($target)（原位置 $position）")
-            verifyAfterDispatch(pkg, "seekTo", stateName(c.playbackState?.state), position)
+            when (action) {
+                MediaAction.PAUSE -> {
+                    c.transportControls.pause()
+                    Log.i(TAG, "已向 $pkg 下发 pause（下发前 state=$beforeState）")
+                }
+                MediaAction.PLAY -> {
+                    c.transportControls.play()
+                    Log.i(TAG, "已向 $pkg 下发 play（下发前 state=$beforeState）")
+                }
+                MediaAction.REWIND -> {
+                    val target = ((beforePosition ?: 0L) - seconds * 1000L).coerceAtLeast(0L)
+                    c.transportControls.seekTo(target)
+                    Log.i(TAG, "已向 $pkg 下发 seekTo($target)（原位置 $beforePosition）")
+                }
+            }
+            verifyAfterDispatch(pkg, action.label, beforeState, beforePosition)
             true
         } catch (e: Exception) {
-            Log.w(TAG, "向 $pkg 下发 seekTo 异常（未被吞掉，这里打印）：${e.javaClass.simpleName} ${e.message}")
+            Log.w(TAG, "向 $pkg 下发 ${action.label} 异常（未被吞掉，这里打印）：${e.javaClass.simpleName} ${e.message}")
             false
+        } finally {
+            Log.i(TAG, "${action.label} 流程结束：Controller 引用已丢弃（不缓存，下次指令重新获取）")
         }
     }
 

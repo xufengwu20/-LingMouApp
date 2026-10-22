@@ -61,12 +61,17 @@ class GazeTracker(
             if (pausedByGaze) {
                 val now = SystemClock.elapsedRealtime()
                 if (now - lastActionAtMs < actionCooldownMs) {
-                    // 防抖：距上次动作不足冷却时间，先不恢复播放
+                    // 防抖：距上次动作不足冷却时间，本次不恢复（下个 tick 自动重试，
+                    // 状态保持 pausedByGaze=true，不会卡死）
                     return 0L
                 }
                 lastActionAtMs = now
-                pausedByGaze = false
-                onAttentionBack()
+                pausedByGaze = false          // 先复位状态，再回调
+                try {
+                    onAttentionBack()
+                } catch (e: Exception) {
+                    // 状态已复位：回调异常不影响后续触发（锁不会卡死）
+                }
             }
             return 0L
         }
@@ -84,8 +89,12 @@ class GazeTracker(
                 return away
             }
             lastActionAtMs = now
-            pausedByGaze = true
-            onAwayTimeout()
+            pausedByGaze = true              // 先置状态，再回调
+            try {
+                onAwayTimeout()
+            } catch (e: Exception) {
+                // 状态已置位：回调异常也不会反复触发
+            }
         }
         return away
     }

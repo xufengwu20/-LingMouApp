@@ -152,6 +152,8 @@ class VoskSpeechService(
         if (text.isNotEmpty()) {
             Log.i(TAG, "最终识别结果：「$text」")
             onTextCallback?.invoke(text)
+            // 关键节点：证明交付指令后**没有**关掉监听 —— 循环继续，下一句照常识别
+            Log.i(TAG, "已交付指令解析 —— 识别循环未退出，继续监听下一句")
         }
     }
 

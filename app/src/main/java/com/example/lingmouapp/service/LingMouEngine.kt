@@ -305,10 +305,15 @@ object LingMouEngine {
         // 先把「当前能拿到哪些会话、目标包名」写进 logcat 与应用日志：
         // 真机上「点了没反应」时直接看这行，就能区分是没会话/选错目标/调用被忽略。
         val snapshot = mediaSession?.snapshot()
+        val sessionCount = snapshot?.sessionCount ?: 0
         val sessionDetail = snapshot?.detail ?: "无"
         val targetPackage = snapshot?.targetPackage ?: "无"
-        Log.i(TAG, "[媒体] 会话列表：$sessionDetail ｜ 目标包名：$targetPackage ｜ 动作：${action.label}（$reason）")
-        log("[媒体] 会话列表：$sessionDetail；目标：$targetPackage")
+        // 关键节点：动作触发 + 当前能拿到的会话数 + 目标包（真机「第二次失效」排查的第一眼）
+        Log.i(
+            TAG,
+            "[媒体] 动作触发：${action.label}（$reason）→ 当前活跃会话 $sessionCount 个：$sessionDetail ｜ 目标：$targetPackage"
+        )
+        log("[媒体] 会话 $sessionCount 个：$sessionDetail；目标：$targetPackage")
 
         val delivered = when (action) {
             MediaAction.PAUSE -> mediaSession?.pause() ?: false
