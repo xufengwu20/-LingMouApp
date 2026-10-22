@@ -8,9 +8,14 @@ import android.os.SystemClock
  * onFrame() 由相机分析回调高频调用（只更新布尔量，不加锁、不耗时），
  * tick() 由 200ms 的定时器调用负责计时与触发。
  * 两者分离的好处：即使相机某一帧卡住，计时依然准确。
+ *
+ * 演示保障：任何一次「暂停/恢复」动作触发后，[actionCooldownMs]（默认 2 秒）内
+ * 不会再触发反向动作 —— 防止人脸在屏幕边缘反复进出导致暂停/恢复来回闪烁，
+ * 答辩演示时画面才稳。
  */
 class GazeTracker(
     private val awayThresholdMs: Long = DEFAULT_AWAY_THRESHOLD_MS,
+    private val actionCooldownMs: Long = DEFAULT_ACTION_COOLDOWN_MS,
     private val onAwayTimeout: () -> Unit,
     private val onAttentionBack: () -> Unit
 ) {
@@ -27,6 +32,10 @@ class GazeTracker(
     /** 必须至少看到过一次「在注视」，才允许触发自动暂停，避免一开始就误暂停 */
     @Volatile
     private var armed: Boolean = false
+
+    /** 上一次动作（暂停或恢复）的时刻，用于防抖冷却 */
+    @Volatile
+    private var lastActionAtMs: Long = 0L
 
     /**
      * 每一帧人脸检测结果。
@@ -50,6 +59,12 @@ class GazeTracker(
         if (attentive) {
             awaySince = 0L
             if (pausedByGaze) {
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastActionAtMs < actionCooldownMs) {
+                    // 防抖：距上次动作不足冷却时间，先不恢复播放
+                    return 0L
+                }
+                lastActionAtMs = now
                 pausedByGaze = false
                 onAttentionBack()
             }
@@ -63,6 +78,12 @@ class GazeTracker(
 
         val away = SystemClock.elapsedRealtime() - awaySince
         if (armed && away >= awayThresholdMs && !pausedByGaze) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastActionAtMs < actionCooldownMs) {
+                // 防抖：刚触发过动作，这次先不暂停（离开计时继续累积）
+                return away
+            }
+            lastActionAtMs = now
             pausedByGaze = true
             onAwayTimeout()
         }
@@ -83,9 +104,13 @@ class GazeTracker(
         awaySince = 0L
         pausedByGaze = false
         armed = false
+        lastActionAtMs = 0L
     }
 
     companion object {
         const val DEFAULT_AWAY_THRESHOLD_MS = 3_000L
+
+        /** 暂停/恢复动作之间的最小间隔（演示防抖） */
+        const val DEFAULT_ACTION_COOLDOWN_MS = 2_000L
     }
 }

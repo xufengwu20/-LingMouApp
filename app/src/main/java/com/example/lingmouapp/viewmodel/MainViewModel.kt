@@ -92,6 +92,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteRecipe(id: Long) = LingMouEngine.deleteRecipe(id)
 
+    /** 一键注入演示数据（答辩用） */
+    fun seedDemoData() = LingMouEngine.seedDemoData()
+
     fun onCameraPermission(granted: Boolean) = LingMouEngine.setCameraPermission(granted)
 
     fun onAudioPermission(granted: Boolean) = LingMouEngine.setAudioPermission(granted)

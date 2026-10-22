@@ -53,7 +53,8 @@ fun UserTab(
     modifier: Modifier = Modifier,
     onRequestRuntimePermissions: () -> Unit,
     onOpenNotificationAccess: () -> Unit,
-    onOpenExactAlarmSettings: () -> Unit
+    onOpenExactAlarmSettings: () -> Unit,
+    onSeedDemoData: () -> Unit
 ) {
     // 详情页选择状态：纯 UI 状态，不进 AppUiState
     var selectedNote by remember { mutableStateOf<NoteItem?>(null) }
@@ -90,7 +91,8 @@ fun UserTab(
             else -> KnowledgeList(
                 state = state,
                 onNoteClick = { selectedNote = it },
-                onRecipeClick = { selectedRecipe = it }
+                onRecipeClick = { selectedRecipe = it },
+                onSeedDemoData = onSeedDemoData
             )
         }
     }
@@ -246,7 +248,8 @@ private fun SpecialPermissionRow(
 private fun KnowledgeList(
     state: AppUiState,
     onNoteClick: (NoteItem) -> Unit,
-    onRecipeClick: (RecipeItem) -> Unit
+    onRecipeClick: (RecipeItem) -> Unit,
+    onSeedDemoData: () -> Unit
 ) {
     SectionCard(title = "我的笔记 / 食谱") {
         if (state.notes.isEmpty() && state.recipes.isEmpty()) {
@@ -259,6 +262,8 @@ private fun KnowledgeList(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            // 演示用入口：只在列表为空时显示（答辩前点一下，数据就位）
+            TextButton(onClick = onSeedDemoData) { Text("一键注入演示数据") }
             return@SectionCard
         }
 

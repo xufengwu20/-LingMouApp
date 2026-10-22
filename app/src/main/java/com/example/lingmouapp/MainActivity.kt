@@ -64,7 +64,8 @@ class MainActivity : ComponentActivity() {
                     onRefreshKnowledge = viewModel::refreshKnowledge,
                     onRequestRuntimePermissions = { requestRuntimePermissions() },
                     onOpenNotificationAccess = { jumpToNotificationAccess() },
-                    onOpenExactAlarmSettings = { jumpToExactAlarm() }
+                    onOpenExactAlarmSettings = { jumpToExactAlarm() },
+                    onSeedDemoData = viewModel::seedDemoData
                 )
             }
         }

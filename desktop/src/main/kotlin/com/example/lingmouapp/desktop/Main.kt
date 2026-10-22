@@ -131,7 +131,8 @@ fun main() {
                     onRefreshKnowledge = { DesktopEngine.refreshKnowledge() },
                     onRequestRuntimePermissions = { DesktopEngine.notSupported("运行时权限（桌面端不需要）") },
                     onOpenNotificationAccess = { DesktopEngine.notSupported("通知使用权设置") },
-                    onOpenExactAlarmSettings = { DesktopEngine.notSupported("精确闹钟设置") }
+                    onOpenExactAlarmSettings = { DesktopEngine.notSupported("精确闹钟设置") },
+                    onSeedDemoData = { DesktopEngine.seedDemoData() }
                 )
             }
         }

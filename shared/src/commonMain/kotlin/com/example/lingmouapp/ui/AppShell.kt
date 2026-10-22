@@ -38,7 +38,8 @@ fun AppShell(
     onRefreshKnowledge: () -> Unit,
     onRequestRuntimePermissions: () -> Unit,
     onOpenNotificationAccess: () -> Unit,
-    onOpenExactAlarmSettings: () -> Unit
+    onOpenExactAlarmSettings: () -> Unit,
+    onSeedDemoData: () -> Unit
 ) {
     var selectedTab by remember { mutableStateOf(MainTab.MODE) }
 
@@ -80,7 +81,8 @@ fun AppShell(
                 modifier = contentModifier,
                 onRequestRuntimePermissions = onRequestRuntimePermissions,
                 onOpenNotificationAccess = onOpenNotificationAccess,
-                onOpenExactAlarmSettings = onOpenExactAlarmSettings
+                onOpenExactAlarmSettings = onOpenExactAlarmSettings,
+                onSeedDemoData = onSeedDemoData
             )
         }
     }

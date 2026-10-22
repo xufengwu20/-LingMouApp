@@ -53,8 +53,6 @@ class SiliconFlowAsrEngine(
 
         isListening = true
         loopJob = scope.launch {
-            var consecutiveFailures = 0
-
             while (isActive && isListening) {
                 val wav = try {
                     recorder.recordUtterance()
@@ -73,31 +71,21 @@ class SiliconFlowAsrEngine(
                 Log.i(AIService.TAG, "已录到一句（${wav.size} 字节）→ 上传转写")
                 aiService.transcribeWav(wav).fold(
                     onSuccess = { text ->
-                        consecutiveFailures = 0
                         Log.i(AIService.TAG, "转写结果：「$text」")
                         if (text.isNotBlank()) onText(text)
                     },
                     onFailure = { error ->
                         // 主动取消（stop / 更换引擎）不是识别失败：静默退出，
-                        // 绝不能把「StandaloneCoroutine was cancelled」报成失败，
-                        // 更不能用它去累积连续失败、误触发降级。
+                        // 绝不能把「StandaloneCoroutine was cancelled」报成失败。
                         if (error is CancellationException || !isActive || !isListening) {
                             return@fold
                         }
-                        consecutiveFailures++
+                        // 演示保障：云端失败（超时/限流/欠费）**不弹任何报错红字**，
+                        // 只记 logcat，并立即静默降级到本地 Vosk 识别。
                         val detail = error.message ?: error.javaClass.simpleName
-                        onError(
-                            "云端识别失败($consecutiveFailures/$MAX_CONSECUTIVE_FAILURES)：$detail"
-                        )
-                        if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-                            isListening = false
-                            onDegrade(
-                                "云端识别连续 $MAX_CONSECUTIVE_FAILURES 次失败（$detail），" +
-                                    "已自动降级为系统内置识别"
-                            )
-                        } else {
-                            delay(ERROR_RETRY_DELAY_MS)
-                        }
+                        Log.w(AIService.TAG, "云端识别失败（$detail）→ 静默降级到本地识别")
+                        isListening = false
+                        onDegrade("云端识别不可用（$detail），已静默切换到本地离线识别")
                     }
                 )
             }
@@ -118,7 +106,5 @@ class SiliconFlowAsrEngine(
 
     companion object {
         private const val NO_VOICE_DELAY_MS = 300L
-        private const val ERROR_RETRY_DELAY_MS = 1_500L
-        const val MAX_CONSECUTIVE_FAILURES = 3
     }
 }

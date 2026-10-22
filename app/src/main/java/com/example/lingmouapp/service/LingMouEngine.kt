@@ -754,6 +754,13 @@ object LingMouEngine {
         log("[知识库] 删除菜谱 #$id")
     }
 
+    /** 一键注入演示数据（答辩用）：只在库为空时写入 */
+    fun seedDemoData() {
+        val seeded = DatabaseService.seedDemo()
+        refreshKnowledge()
+        log(if (seeded) "已注入演示数据（3 条笔记 + 2 条菜谱）" else "演示数据已存在或数据库不可用，跳过注入")
+    }
+
     // ---------------------------------------------------------------- 本地指令
 
     /**

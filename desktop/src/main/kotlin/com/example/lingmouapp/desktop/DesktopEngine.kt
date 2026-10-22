@@ -11,6 +11,7 @@ import com.example.lingmouapp.model.NoteItem
 import com.example.lingmouapp.model.PlatformCapabilities
 import com.example.lingmouapp.model.PlayerState
 import com.example.lingmouapp.model.RecipeItem
+import com.example.lingmouapp.shared.RecipeStepDraft
 import com.example.lingmouapp.model.Reminder
 import com.example.lingmouapp.service.nlp.LocalCommandRouter
 import kotlinx.coroutines.CoroutineScope
@@ -353,6 +354,64 @@ object DesktopEngine {
         repository?.deleteRecipe(id)
         refreshKnowledge()
         log("删除菜谱 #$id")
+    }
+
+    /** 一键注入演示数据（答辩用）：只在库为空时写入 */
+    fun seedDemoData() {
+        val repo = repository
+        if (repo == null) {
+            log("数据库不可用，无法注入演示数据")
+            return
+        }
+        val seeded = try {
+            if (repo.noteCount() > 0L || repo.recipeCount() > 0L) {
+                false
+            } else {
+                val now = System.currentTimeMillis()
+                val day = 86_400_000L
+                repo.insertNote(
+                    title = "线性代数：特征值与特征向量",
+                    content = "特征向量是线性变换中方向保持不变的向量：Av = λv。\n" +
+                        "要点：\n1. 特征值 λ 决定伸缩比例\n2. 相似矩阵特征值相同\n" +
+                        "3. 谱分解把矩阵写成特征向量投影之和\n\n应用：PCA 降维、PageRank、振动分析。",
+                    mode = "FOCUS",
+                    createdAt = now - 3 * day
+                )
+                repo.insertNote(
+                    title = "机器学习：过拟合与正则化",
+                    content = "过拟合 = 模型记住了训练集的噪声，泛化变差。\n" +
+                        "要点：\n1. 训练误差降、验证误差升，即过拟合\n2. L1/L2 正则化给参数加约束\n" +
+                        "3. Dropout、早停、数据增强都是解药",
+                    mode = "COOKING",
+                    createdAt = now - 2 * day
+                )
+                repo.insertRecipe(
+                    title = "番茄炒蛋",
+                    summary = "10 分钟快手家常菜，酸甜下饭",
+                    steps = listOf(
+                        RecipeStepDraft("打散三个鸡蛋，加少许盐和几滴料酒", "1分钟"),
+                        RecipeStepDraft("热锅下油，倒入蛋液炒至刚凝固盛出", "2分钟"),
+                        RecipeStepDraft("下番茄块翻炒出汁，倒回鸡蛋调味", "5分钟")
+                    ),
+                    createdAt = now - 2 * day
+                )
+                repo.insertRecipe(
+                    title = "红烧肉",
+                    summary = "肥而不腻的经典硬菜，糖色是灵魂",
+                    steps = listOf(
+                        RecipeStepDraft("五花肉切块，冷水下锅焯去血沫", "5分钟"),
+                        RecipeStepDraft("小火炒糖色，下肉块翻炒上色", "8分钟"),
+                        RecipeStepDraft("加料酒、生抽、老抽和热水，小火炖 40 分钟", "40分钟")
+                    ),
+                    createdAt = now - 1 * day
+                )
+                true
+            }
+        } catch (e: Exception) {
+            false
+        }
+        refreshKnowledge()
+        log(if (seeded) "已注入演示数据（2 条笔记 + 2 条菜谱）" else "演示数据已存在或数据库不可用，跳过注入")
     }
 
     fun generateSummary() {
